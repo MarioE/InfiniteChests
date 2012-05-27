@@ -96,16 +96,7 @@ namespace InfiniteChests
                         int Y = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 5);
                         if (e.Msg.readBuffer[e.Index] == 0 && Main.tile[X, Y].type == 21)
                         {
-                            if (Main.tile[X, Y].frameY != 0)
-                            {
-                                Y--;
-                            }
-                            if (Main.tile[X, Y].frameX % 36 != 0)
-                            {
-                                X--;
-                            }
-                            ThreadPool.QueueUserWorkItem(KillChestCallback,
-                                new ChestArgs { plr = TShock.Players[e.Msg.whoAmI], loc = new Vector2(X, Y) });
+                            TShock.Players[e.Msg.whoAmI].SendTileSquare(X, Y, 3);
                             e.Handled = true;
                         }
                         else if (e.Msg.readBuffer[e.Index] == 1 && e.Msg.readBuffer[e.Index + 9] == 21)
@@ -137,6 +128,7 @@ namespace InfiniteChests
                             }
                             ThreadPool.QueueUserWorkItem(KillChestCallback,
                                 new ChestArgs { plr = TShock.Players[e.Msg.whoAmI], loc = new Vector2(X, Y) });
+                            TShock.Players[e.Msg.whoAmI].SendTileSquare(X, Y, 3);
                             e.Handled = true;
                         }
                     }
