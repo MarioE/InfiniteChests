@@ -25,5 +25,6 @@ namespace InfiniteChests
         UNPROTECT,
         REFILL,
         UNREFILL,
+        INFO
     }
 }
