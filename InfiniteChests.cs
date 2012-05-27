@@ -92,10 +92,24 @@ namespace InfiniteChests
                     break;
                 case PacketTypes.Tile:
                     {
-                        if (e.Msg.readBuffer[e.Index] == 1 && e.Msg.readBuffer[e.Index + 9] == 21)
+                        int X = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 1);
+                        int Y = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 5);
+                        if (e.Msg.readBuffer[e.Index] == 0 && Main.tile[X, Y].type == 21)
                         {
-                            int X = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 1);
-                            int Y = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 5);
+                            if (Main.tile[X, Y].frameY != 0)
+                            {
+                                Y--;
+                            }
+                            if (Main.tile[X, Y].frameX % 36 != 0)
+                            {
+                                X--;
+                            }
+                            ThreadPool.QueueUserWorkItem(KillChestCallback,
+                                new ChestArgs { plr = TShock.Players[e.Msg.whoAmI], loc = new Vector2(X, Y) });
+                            e.Handled = true;
+                        }
+                        else if (e.Msg.readBuffer[e.Index] == 1 && e.Msg.readBuffer[e.Index + 9] == 21)
+                        {
                             if (TShock.Regions.CanBuild(X, Y, TShock.Players[e.Msg.whoAmI]))
                             {
                                 ThreadPool.QueueUserWorkItem(PlaceChestCallback,
@@ -123,6 +137,7 @@ namespace InfiniteChests
                             }
                             ThreadPool.QueueUserWorkItem(KillChestCallback,
                                 new ChestArgs { plr = TShock.Players[e.Msg.whoAmI], loc = new Vector2(X, Y) });
+                            e.Handled = true;
                         }
                     }
                     break;
