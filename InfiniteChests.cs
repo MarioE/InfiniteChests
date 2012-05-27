@@ -308,7 +308,7 @@ namespace InfiniteChests
                     };
                     if (chest.account != c.plr.UserAccountName && chest.account != "")
                     {
-                        c.plr.SendMessage("This chest is protected.", Color.IndianRed);
+                        c.plr.SendMessage("This chest is protected.", Color.Red);
                         c.plr.SendTileSquare((int)c.loc.X, (int)c.loc.Y, 3);
                         return;
                     }
