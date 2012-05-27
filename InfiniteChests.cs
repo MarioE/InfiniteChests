@@ -239,7 +239,7 @@ namespace InfiniteChests
                                 break;
                             }
                             if (chest.account != c.plr.UserAccountName &&
-                                c.plr.Group.HasPermission("removechestprotection"))
+                                !c.plr.Group.HasPermission("removechestprotection"))
                             {
                                 c.plr.SendMessage("This chest is not yours.");
                                 break;
@@ -255,7 +255,7 @@ namespace InfiniteChests
                             break;
                         default:
                             if (chest.account != c.plr.UserAccountName &&
-                                chest.account != "" && c.plr.Group.HasPermission("openallchests"))
+                                chest.account != "" && !c.plr.Group.HasPermission("openallchests"))
                             {
                                 c.plr.SendMessage("This chest is protected.", Color.Red);
                                 break;
