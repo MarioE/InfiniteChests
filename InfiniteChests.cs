@@ -325,6 +325,8 @@ namespace InfiniteChests
                         return;
                     }
                     Database.Query("DELETE FROM Chests WHERE X = @0 AND Y = @1 AND WorldID = @2", (int)c.loc.X, (int)c.loc.Y, Main.worldID);
+                    WorldGen.KillTile((int)c.loc.X, (int)c.loc.Y);
+                    TSPlayer.All.SendTileSquare((int)c.loc.X, (int)c.loc.Y, 3);
                     return;
                 }
             }
