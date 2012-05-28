@@ -103,7 +103,7 @@ namespace InfiniteChests
                                     ThreadPool.QueueUserWorkItem(PlaceChestCallback,
                                         new ChestArgs { plr = TShock.Players[e.Msg.whoAmI], loc = new Vector2(X, Y - 1) });
                                     WorldGen.PlaceChest(X, Y, 21, false, e.Msg.readBuffer[e.Index + 10]);
-                                    TSPlayer.All.SendTileSquare(X, Y, 3);
+                                    NetMessage.SendData((int)PacketTypes.Tile, -1, e.Msg.whoAmI, "", 1, X, Y, 21, e.Msg.readBuffer[e.Index + 10]);
                                     e.Handled = true;
                                 }
                             }
@@ -199,10 +199,6 @@ namespace InfiniteChests
                         c.x, c.y, items.ToString(), Main.worldID);
                     converted++;
                 }
-            }
-            for (int i = 0; i < 1000; i++)
-            {
-                Main.chest[i] = null;
             }
             ((ChestArgs)t).plr.SendMessage("Converted " + converted + " chests.");
         }
@@ -330,7 +326,8 @@ namespace InfiniteChests
                     }
                     Database.Query("DELETE FROM Chests WHERE X = @0 AND Y = @1 AND WorldID = @2", (int)c.loc.X, (int)c.loc.Y, Main.worldID);
                     WorldGen.KillTile((int)c.loc.X, (int)c.loc.Y);
-                    TSPlayer.All.SendTileSquare((int)c.loc.X, (int)c.loc.Y, 3);
+                    TSPlayer.All.SendData(PacketTypes.Tile, "", 0, (int)c.loc.X, (int)c.loc.Y + 1);
+                    TSPlayer.All.SendTileSquare((int)c.loc.X, (int)c.loc.Y, 1);
                     return;
                 }
             }
