@@ -15,7 +15,8 @@ namespace InfiniteChests
 
     public enum ChestFlags : byte
     {
-        REFILL = 1
+        REFILL = 1,
+        REGION = 2
     }
 
     public enum ChestAction : byte
@@ -24,7 +25,14 @@ namespace InfiniteChests
         PROTECT,
         UNPROTECT,
         REFILL,
-        UNREFILL,
+        REGION,
         INFO
+    }
+
+    public struct PlayerInfo
+    {
+        public ChestAction action;
+        public Point loc;
+        public int time;
     }
 }
