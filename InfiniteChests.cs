@@ -254,7 +254,7 @@ namespace InfiniteChests
                             c.plr.SendMessage("This chest is now protected.");
                             break;
                         case ChestAction.REFILL:
-                            if ((chest.flags & ChestFlags.REFILL) == 0 && infos[c.plr.Index].time == 0)
+                            if ((chest.flags & ChestFlags.REFILL) == 0)
                             {
                                 Database.Query("UPDATE Chests SET Flags = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
                                     ((int)chest.flags & 2) + (infos[c.plr.Index].time << 2) + 1, c.loc.X, c.loc.Y, Main.worldID);
