@@ -15,8 +15,9 @@ namespace InfiniteChests
 
     public enum ChestFlags : byte
     {
-        REFILL = 1,
-        REGION = 2
+        PUBLIC = 1,
+        REGION = 2,
+        REFILL = 4
     }
 
     public enum ChestAction : byte
@@ -26,6 +27,7 @@ namespace InfiniteChests
         UNPROTECT,
         REFILL,
         REGION,
+        PUBLIC,
         INFO
     }
 

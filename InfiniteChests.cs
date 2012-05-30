@@ -33,6 +33,7 @@ namespace InfiniteChests
             get { return "InfiniteChests"; }
         }
         public static Dictionary<Point, int> Timer = new Dictionary<Point, int>();
+        public static System.Timers.Timer TimerDec = new System.Timers.Timer(1000);
         public override Version Version
         {
             get { return Assembly.GetExecutingAssembly().GetName().Version; }
@@ -51,7 +52,7 @@ namespace InfiniteChests
                 NetHooks.GetData -= OnGetData;
                 GameHooks.Initialize -= OnInitialize;
                 ServerHooks.Leave -= OnLeave;
-                GameHooks.Update -= OnUpdate;
+                TimerDec.Dispose();
             }
         }
 
@@ -60,7 +61,8 @@ namespace InfiniteChests
             NetHooks.GetData += OnGetData;
             GameHooks.Initialize += OnInitialize;
             ServerHooks.Leave += OnLeave;
-            GameHooks.Update += OnUpdate;
+
+            TimerDec.Elapsed += OnElapsed;
         }
 
         void OnGetData(GetDataEventArgs e)
@@ -135,11 +137,31 @@ namespace InfiniteChests
                 }
             }
         }
+        void OnElapsed(object sender, System.Timers.ElapsedEventArgs e)
+        {
+            List<Point> dec = new List<Point>();
+            foreach (Point p in Timer.Keys)
+            {
+                dec.Add(p);
+            }
+            foreach (Point p in dec)
+            {
+                if (Timer[p] == 0)
+                {
+                    Timer.Remove(p);
+                }
+                else
+                {
+                    Timer[p]--;
+                }
+            }
+        }
         void OnInitialize()
         {
             Commands.ChatCommands.Add(new Command("protectchest", Deselect, "ccset"));
             Commands.ChatCommands.Add(new Command("showchestinfo", Info, "cinfo"));
             Commands.ChatCommands.Add(new Command("maintenance", ConvertChests, "convchests"));
+            Commands.ChatCommands.Add(new Command("protectchest", PublicProtect, "cpset"));
             Commands.ChatCommands.Add(new Command("refillchest", Refill, "crefill"));
             Commands.ChatCommands.Add(new Command("protectchest", RegionProtect, "crset"));
             Commands.ChatCommands.Add(new Command("protectchest", Protect, "cset"));
@@ -177,25 +199,6 @@ namespace InfiniteChests
         void OnLeave(int index)
         {
             infos[index] = new PlayerInfo();
-        }
-        void OnUpdate()
-        {
-            List<Point> dec = new List<Point>();
-            foreach (Point p in Timer.Keys)
-            {
-                dec.Add(p);
-            }
-            foreach (Point p in dec)
-            {
-                if (Timer[p] == 0)
-                {
-                    Timer.Remove(p);
-                }
-                else
-                {
-                    Timer[p]--;
-                }
-            }
         }
 
         void ConvertCallback(object t)
@@ -239,9 +242,9 @@ namespace InfiniteChests
                     switch (infos[c.plr.Index].action)
                     {
                         case ChestAction.INFO:
-                            c.plr.SendMessage(string.Format("X: {0} Y: {1} Account: {2} Refill: {3} Delay: {4} second(s) Region: {5}",
-                                c.loc.X, c.loc.Y, chest.account == "" ? "N/A" : chest.account,
-                                (chest.flags & ChestFlags.REFILL) != 0, (int)chest.flags >> 2, (chest.flags & ChestFlags.REGION) != 0), Color.Yellow);
+                            c.plr.SendMessage(string.Format("X: {0} Y: {1} Account: {2} {3} Refill: {4} Delay: {5} second(s) Region: {6}",
+                                c.loc.X, c.loc.Y, chest.account == "" ? "N/A" : chest.account, ((chest.flags & ChestFlags.PUBLIC) != 0) ? "(public)" : "",
+                                (chest.flags & ChestFlags.REFILL) != 0, (int)chest.flags >> 3, (chest.flags & ChestFlags.REGION) != 0), Color.Yellow);
                             break;
                         case ChestAction.PROTECT:
                             if (chest.account != "")
@@ -253,11 +256,28 @@ namespace InfiniteChests
                                 c.plr.UserAccountName, c.loc.X, c.loc.Y, Main.worldID);
                             c.plr.SendMessage("This chest is now protected.");
                             break;
+                        case ChestAction.PUBLIC:
+                            if (chest.account != c.plr.UserAccountName && chest.account != "")
+                            {
+                                c.plr.SendMessage("This chest is not yours.");
+                                break;
+                            }
+                            Database.Query("UPDATE Chests SET Flags = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
+                                (int)(chest.flags ^ ChestFlags.PUBLIC), c.loc.X, c.loc.Y, Main.worldID);
+                            if ((chest.flags & ChestFlags.PUBLIC) == 0)
+                            {
+                                c.plr.SendMessage("This chest is now public.");
+                            }
+                            else
+                            {
+                                c.plr.SendMessage("This chest is now private.");
+                            }
+                            break;
                         case ChestAction.REFILL:
                             if (infos[c.plr.Index].time > 0)
                             {
                                 Database.Query("UPDATE Chests SET Flags = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
-                                    ((int)chest.flags & 2) + (infos[c.plr.Index].time << 2) + 1, c.loc.X, c.loc.Y, Main.worldID);
+                                    ((int)chest.flags & 3) + (infos[c.plr.Index].time << 2) + 4, c.loc.X, c.loc.Y, Main.worldID);
                                 c.plr.SendMessage(string.Format("This chest will now refill with a delay of {0} second(s).", infos[c.plr.Index].time));
                             }
                             else
@@ -308,9 +328,9 @@ namespace InfiniteChests
                             c.plr.SendMessage("This chest is no longer protected.");
                             break;
                         default:
-                            if ((chest.account != c.plr.UserAccountName &&
+                            if ((chest.flags & ChestFlags.PUBLIC) != 0 && ((chest.account != c.plr.UserAccountName &&
                                 chest.account != "" && !c.plr.Group.HasPermission("openallchests") && (chest.flags & ChestFlags.REGION) == 0)
-                                || ((chest.flags & ChestFlags.REGION) != 0 && !TShock.Regions.CanBuild(c.loc.X, c.loc.Y, c.plr)))
+                                || ((chest.flags & ChestFlags.REGION) != 0 && !TShock.Regions.CanBuild(c.loc.X, c.loc.Y, c.plr))))
                             {
                                 c.plr.SendMessage("This chest is protected.", Color.Red);
                                 break;
@@ -318,7 +338,7 @@ namespace InfiniteChests
                             int timeLeft;
                             if (Timer.TryGetValue(new Point(c.loc.X, c.loc.Y), out timeLeft))
                             {
-                                c.plr.SendMessage(string.Format("This chest will refill in {0} second(s).", (int)timeLeft / 60), Color.Red);
+                                c.plr.SendMessage(string.Format("This chest will refill in {0} second(s).", (int)timeLeft), Color.Red);
                                 break;
                             }
                             int[] itemArgs = new int[60];
@@ -350,7 +370,7 @@ namespace InfiniteChests
         void KillChestCallback(object t)
         {
             ChestArgs c = (ChestArgs)t;
-            using (QueryResult query = Database.QueryReader("SELECT Account, Items, Flags FROM Chests WHERE X = @0 AND Y = @1 AND WorldID = @2",
+            using (QueryResult query = Database.QueryReader("SELECT Account, Items FROM Chests WHERE X = @0 AND Y = @1 AND WorldID = @2",
                 c.loc.X, c.loc.Y, Main.worldID))
             {
                 while (query.Read())
@@ -358,7 +378,6 @@ namespace InfiniteChests
                     Chest chest = new Chest
                     {
                         account = query.Get<string>("Account"),
-                        flags = (ChestFlags)query.Get<int>("Flags"),
                         items = query.Get<string>("Items")
                     };
                     if (chest.account != c.plr.UserAccountName && chest.account != "")
@@ -397,7 +416,7 @@ namespace InfiniteChests
                     };
                     if ((chest.flags & ChestFlags.REFILL) != 0)
                     {
-                        Timer.Add(new Point(infos[ci.plr.Index].loc.X, infos[ci.plr.Index].loc.Y), ((int)chest.flags >> 2) * 60);
+                        Timer.Add(new Point(infos[ci.plr.Index].loc.X, infos[ci.plr.Index].loc.Y), (int)chest.flags >> 3);
                         return;
                     }
                     int[] itemArgs = new int[60];
@@ -478,6 +497,11 @@ namespace InfiniteChests
                 infos[e.Player.Index].action = ChestAction.REFILL;
                 e.Player.SendMessage("Open a chest to toggle its refill status.");
             }
+        }
+        void PublicProtect(CommandArgs e)
+        {
+            infos[e.Player.Index].action = ChestAction.PUBLIC;
+            e.Player.SendMessage("Open a chest to toggle its public status.");
         }
         void RegionProtect(CommandArgs e)
         {
