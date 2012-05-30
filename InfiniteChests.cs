@@ -277,7 +277,7 @@ namespace InfiniteChests
                             if (infos[c.plr.Index].time > 0)
                             {
                                 Database.Query("UPDATE Chests SET Flags = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
-                                    ((int)chest.flags & 3) + (infos[c.plr.Index].time << 2) + 4, c.loc.X, c.loc.Y, Main.worldID);
+                                    ((int)chest.flags & 3) + (infos[c.plr.Index].time << 3) + 4, c.loc.X, c.loc.Y, Main.worldID);
                                 c.plr.SendMessage(string.Format("This chest will now refill with a delay of {0} second(s).", infos[c.plr.Index].time));
                             }
                             else
