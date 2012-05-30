@@ -254,25 +254,24 @@ namespace InfiniteChests
                             c.plr.SendMessage("This chest is now protected.");
                             break;
                         case ChestAction.REFILL:
-                            if ((chest.flags & ChestFlags.REFILL) == 0)
+                            if (infos[c.plr.Index].time > 0)
                             {
                                 Database.Query("UPDATE Chests SET Flags = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
                                     ((int)chest.flags & 2) + (infos[c.plr.Index].time << 2) + 1, c.loc.X, c.loc.Y, Main.worldID);
-                                Console.WriteLine(((int)chest.flags & 2) + (infos[c.plr.Index].time << 2) + 1);
-                                if (infos[c.plr.Index].time > 0)
-                                {
-                                    c.plr.SendMessage(string.Format("This chest will now refill with a delay of {0} second(s).", infos[c.plr.Index].time));
-                                }
-                                else
-                                {
-                                    c.plr.SendMessage("This chest will now refill.");
-                                }
+                                c.plr.SendMessage(string.Format("This chest will now refill with a delay of {0} second(s).", infos[c.plr.Index].time));
                             }
                             else
                             {
                                 Database.Query("UPDATE Chests SET Flags = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
-                                    (int)(chest.flags & ~ChestFlags.REFILL), c.loc.X, c.loc.Y, Main.worldID);
-                                c.plr.SendMessage("This chest will no longer refill.");
+                                    (int)(chest.flags ^ ChestFlags.REFILL) & 3, c.loc.X, c.loc.Y, Main.worldID);
+                                if ((chest.flags & ChestFlags.REFILL) == 0)
+                                {
+                                    c.plr.SendMessage("This chest will now refill.");
+                                }
+                                else
+                                {
+                                    c.plr.SendMessage("This chest will no longer refill.");
+                                }
                             }
                             break;
                         case ChestAction.REGION:
