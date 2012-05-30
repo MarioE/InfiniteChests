@@ -62,7 +62,6 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Chest.cs" />
-    <Compile Include="ChestItem.cs" />
     <Compile Include="InfiniteChests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
