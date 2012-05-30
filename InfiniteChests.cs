@@ -259,7 +259,7 @@ namespace InfiniteChests
                         case ChestAction.PUBLIC:
                             if (chest.account != c.plr.UserAccountName && chest.account != "")
                             {
-                                c.plr.SendMessage("This chest is not yours.");
+                                c.plr.SendMessage("This chest is not yours.", Color.Red);
                                 break;
                             }
                             Database.Query("UPDATE Chests SET Flags = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
@@ -297,7 +297,7 @@ namespace InfiniteChests
                         case ChestAction.REGION:
                             if (chest.account != c.plr.UserAccountName && chest.account != "")
                             {
-                                c.plr.SendMessage("This chest is not yours.");
+                                c.plr.SendMessage("This chest is not yours.", Color.Red);
                                 break;
                             }
                             Database.Query("UPDATE Chests SET Flags = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
@@ -320,7 +320,7 @@ namespace InfiniteChests
                             if (chest.account != c.plr.UserAccountName &&
                                 !c.plr.Group.HasPermission("removechestprotection"))
                             {
-                                c.plr.SendMessage("This chest is not yours.");
+                                c.plr.SendMessage("This chest is not yours.", Color.Red);
                                 break;
                             }
                             Database.Query("UPDATE Chests SET Account = '' WHERE X = @0 AND Y = @1 AND WorldID = @2",
