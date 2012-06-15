@@ -22,7 +22,6 @@ namespace InfiniteChests
         {
             get { return "MarioE"; }
         }
-        public List<Chest> Chests = new List<Chest>();
         public IDbConnection Database;
         public override string Description
         {
@@ -53,7 +52,6 @@ namespace InfiniteChests
                 NetHooks.GetData -= OnGetData;
                 GameHooks.Initialize -= OnInitialize;
                 ServerHooks.Leave -= OnLeave;
-                WorldHooks.SaveWorld -= OnSaveWorld;
 
                 Database.Dispose();
                 TimerDec.Dispose();
@@ -63,9 +61,7 @@ namespace InfiniteChests
         {
             NetHooks.GetData += OnGetData;
             GameHooks.Initialize += OnInitialize;
-            GameHooks.Update += OnUpdate;
             ServerHooks.Leave += OnLeave;
-            WorldHooks.SaveWorld += OnSaveWorld;
 
             TimerDec.Elapsed += OnElapsed;
             TimerDec.Start();
@@ -201,40 +197,23 @@ namespace InfiniteChests
         {
             infos[index] = new PlayerInfo();
         }
-        void OnSaveWorld(bool resetTime, HandledEventArgs e)
-        {
-            Database.Query("DELETE FROM Chests WHERE WorldID = @0", Main.worldID);
-            foreach (Chest c in Chests)
-            {
-                Database.Query("INSERT INTO Chests (X, Y, Account, Items, Flags, WorldID) VALUES (@0, @1, @2, @3, @4, @5)",
-                    c.loc.X, c.loc.Y, c.account, c.items, (int)c.flags, Main.worldID);
-            }
-            Chests.Clear();
-        }
-        void OnUpdate()
-        {
-            if (Main.worldID != 0)
-            {
-                using (QueryResult reader = Database.QueryReader("SELECT * FROM Chests WHERE WorldID = @0", Main.worldID))
-                {
-                    while (reader.Read())
-                    {
-                        Chests.Add(new Chest
-                        {
-                            account = reader.Get<string>("Account"),
-                            flags = (ChestFlags)reader.Get<int>("Flags"),
-                            items = reader.Get<string>("Items"),
-                            loc = new Point(reader.Get<int>("X"), reader.Get<int>("Y"))
-                        });
-                    }
-                }
-                GameHooks.Update -= OnUpdate;
-            }
-        }
 
         void GetChest(int X, int Y, int plr)
         {
-            Chest chest = Chests.Find(c => c.loc.X == X && c.loc.Y == Y);
+            Chest chest = null;
+            using (QueryResult reader = Database.QueryReader("SELECT Account, Flags, Items FROM Chests WHERE X = @0 AND Y = @1 and WorldID = @2",
+                X, Y, Main.worldID))
+            {
+                if (reader.Read())
+                {
+                    chest = new Chest
+                    {
+                        account = reader.Get<string>("Account"),
+                        flags = (ChestFlags)reader.Get<int>("Flags"),
+                        items = reader.Get<string>("Items")
+                    };
+                }
+            }
             TSPlayer player = TShock.Players[plr];
 
             if (chest != null)
@@ -253,7 +232,8 @@ namespace InfiniteChests
                             player.SendMessage("This chest is already protected.", Color.Red);
                             break;
                         }
-                        chest.account = player.UserAccountName;
+                        Database.Query("UPDATE Chests SET Account = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
+                            player.UserAccountName, X, Y, Main.worldID);
                         player.SendMessage("This chest is now protected.");
                         break;
                     case ChestAction.PUBLIC:
@@ -267,8 +247,9 @@ namespace InfiniteChests
                             player.SendMessage("This chest is not yours.", Color.Red);
                             break;
                         }
-                        chest.flags ^= ChestFlags.PUBLIC;
-                        player.SendMessage(string.Format("This chest is now {0}.", (chest.flags & ChestFlags.PUBLIC) == 0 ? "private" : "public"));
+                        Database.Query("UPDATE Chests SET Flags = (Flags ^ 1) WHERE X = @0 AND Y = @1 AND WorldID = @2",
+                            X, Y, Main.worldID);
+                        player.SendMessage(string.Format("This chest is now {0}.", (chest.flags & ChestFlags.PUBLIC) != 0 ? "private" : "public"));
                         break;
                     case ChestAction.REFILL:
                         if (chest.account != player.UserAccountName)
@@ -278,18 +259,16 @@ namespace InfiniteChests
                         }
                         if (infos[plr].time > 0)
                         {
-                            chest.flags = (ChestFlags)(((int)chest.flags & 3) + (infos[plr].time * 8) + 4);
+                            Database.Query("UPDATE Chests SET Flags = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
+                                ((int)chest.flags & 3) + (infos[plr].time * 8) + 4, X, Y, Main.worldID);
                             player.SendMessage(string.Format("This chest will now refill with a delay of {0} second{1}.", infos[plr].time,
                                 infos[plr].time == 1 ? "" : "s"));
                         }
                         else
                         {
-                            chest.flags ^= ChestFlags.REFILL;
-                            player.SendMessage(string.Format("This chest will {0} refill.", (chest.flags & ChestFlags.REFILL) == 0 ? "no longer" : "now"));
-                            if ((chest.flags & ChestFlags.REFILL) == 0)
-                            {
-                                chest.flags &= (ChestFlags)7;
-                            }
+                            Database.Query("UPDATE Chests SET Flags = (Flags ^ 4) & 7 WHERE X = @0 AND Y = @1 AND WorldID = @2",
+                                X, Y, Main.worldID);
+                            player.SendMessage(string.Format("This chest will {0} refill.", (chest.flags & ChestFlags.REFILL) != 0 ? "no longer" : "now"));
                         }
                         break;
                     case ChestAction.REGION:
@@ -303,8 +282,9 @@ namespace InfiniteChests
                             player.SendMessage("This chest is not yours.", Color.Red);
                             break;
                         }
-                        chest.flags ^= ChestFlags.REGION;
-                        player.SendMessage(string.Format("This chest is {0} region shared.", (chest.flags & ChestFlags.REGION) == 0 ? "no longer" : "now"));
+                        Database.Query("UPDATE Chests SET Flags = (Flags ^ 2) WHERE X = @0 AND Y = @1 AND WorldID = @2",
+                            X, Y, Main.worldID);
+                        player.SendMessage(string.Format("This chest is {0} region shared.", (chest.flags & ChestFlags.REGION) != 0 ? "no longer" : "now"));
                         break;
                     case ChestAction.UNPROTECT:
                         if (chest.account == "")
@@ -317,7 +297,8 @@ namespace InfiniteChests
                             player.SendMessage("This chest is not yours.", Color.Red);
                             break;
                         }
-                        chest.account = "";
+                        Database.Query("UPDATE Chests SET Account = '' WHERE X = @0 AND Y = @1 AND WorldID = @2",
+                            X, Y, Main.worldID);
                         player.SendMessage("This chest is now un-protected.");
                         break;
                     default:
@@ -361,7 +342,15 @@ namespace InfiniteChests
         }
         void KillChest(int X, int Y, int plr)
         {
-            Chest chest = Chests.Find(c => c.loc.X == X && c.loc.Y == Y);
+            Chest chest = null;
+            using (QueryResult reader = Database.QueryReader("SELECT Account, Items FROM Chests WHERE X = @0 AND Y = @1 AND WorldID = @2",
+                X, Y, Main.worldID))
+            {
+                if (reader.Read())
+                {
+                    chest = new Chest { account = reader.Get<string>("Account"), items = reader.Get<string>("Items") };
+                }
+            }
             TSPlayer player = TShock.Players[plr];
 
             if (chest != null && chest.account != player.UserAccountName && chest.account != "")
@@ -378,12 +367,20 @@ namespace InfiniteChests
             {
                 WorldGen.KillTile(X, Y);
                 TSPlayer.All.SendData(PacketTypes.Tile, "", 0, X, Y + 1);
-                Chests.Remove(chest);
+                Database.Query("DELETE FROM Chests WHERE X = @0 AND Y = @1 and WorldID = @2", X, Y, Main.worldID);
             }
         }
         void ModChest(int plr, int slot, int ID, int stack, int prefix)
         {
-            Chest chest = Chests.Find(c => c.loc.X == infos[plr].loc.X && c.loc.Y == infos[plr].loc.Y);
+            Chest chest = null;
+            using (QueryResult reader = Database.QueryReader("SELECT Flags, Items FROM Chests WHERE X = @0 AND Y = @1 AND WorldID = @2",
+                infos[plr].loc.X, infos[plr].loc.Y, Main.worldID))
+            {
+                if (reader.Read())
+                {
+                    chest = new Chest { flags = (ChestFlags)reader.Get<int>("Flags"), items = reader.Get<string>("Items") };
+                }
+            }
             TSPlayer player = TShock.Players[plr];
 
             if (chest != null)
@@ -415,26 +412,23 @@ namespace InfiniteChests
                             newItems.Append(',');
                         }
                     }
-                    chest.items = newItems.ToString();
+                    Database.Query("UPDATE Chests SET Items = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
+                        newItems.ToString(), infos[plr].loc.X, infos[plr].loc.Y, Main.worldID);
                 }
             }
         }
         void PlaceChest(int X, int Y, int plr)
         {
             TSPlayer player = TShock.Players[plr];
-
-            Chests.Add(new Chest()
-            {
-                account = player.IsLoggedIn ? player.UserAccountName : "",
-                items = "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",
-                loc = new Point(X, Y - 1)
-            });
+            Database.Query("INSERT INTO Chests (X, Y, Account, Flags, Items, WorldID) VALUES (@0, @1, @2, @3, @4, @5)",
+                X, Y - 1, player.IsLoggedIn ? player.UserAccountName : "", 0,
+                "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0", Main.worldID);
             Main.chest[999] = null;
         }
 
         void ConvertChests(CommandArgs e)
         {
-            Chests.Clear();
+            Database.Query("DELETE FROM Chests WHERE WorldID = @0", Main.worldID);
             int converted = 0;
             StringBuilder items = new StringBuilder();
             foreach (Terraria.Chest c in Main.chest)
@@ -449,7 +443,7 @@ namespace InfiniteChests
                             items.Append(",");
                         }
                     }
-                    Chests.Add(new Chest { items = items.ToString(), loc = new Point(c.x, c.y) });
+                    Database.Query("INSERT INTO Chests (X, Y, Items, WorldID) VALUES (@0, @1, @2, @3)", c.x, c.y, items.ToString(), Main.worldID);
                     converted++;
                     items.Clear();
                 }

@@ -1,5 +1,6 @@
 */bin/*
 */obj/*
+bin/*
 
 *.suo
 *.sdf
@@ -7,3 +8,4 @@
 *.cache
 *.pdb
 *.csproj.user
+*.xnb
