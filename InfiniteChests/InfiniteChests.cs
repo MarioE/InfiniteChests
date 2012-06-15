@@ -366,8 +366,8 @@ namespace InfiniteChests
             else
             {
                 WorldGen.KillTile(X, Y);
-                TSPlayer.All.SendData(PacketTypes.Tile, "", 0, X, Y + 1);
                 Database.Query("DELETE FROM Chests WHERE X = @0 AND Y = @1 and WorldID = @2", X, Y, Main.worldID);
+                TSPlayer.All.SendData(PacketTypes.Tile, "", 0, X, Y + 1);
             }
         }
         void ModChest(int plr, int slot, int ID, int stack, int prefix)
@@ -423,7 +423,7 @@ namespace InfiniteChests
             Database.Query("INSERT INTO Chests (X, Y, Account, Flags, Items, WorldID) VALUES (@0, @1, @2, @3, @4, @5)",
                 X, Y - 1, player.IsLoggedIn ? player.UserAccountName : "", 0,
                 "0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0", Main.worldID);
-            Main.chest[999] = null;
+            Main.chest[0] = null;
         }
 
         void ConvertChests(CommandArgs e)
@@ -431,21 +431,24 @@ namespace InfiniteChests
             Database.Query("DELETE FROM Chests WHERE WorldID = @0", Main.worldID);
             int converted = 0;
             StringBuilder items = new StringBuilder();
-            foreach (Terraria.Chest c in Main.chest)
+            for (int i = 0; i < 1000; i++)
             {
+                Terraria.Chest c = Main.chest[i];
                 if (c != null)
                 {
-                    for (int i = 0; i < 20; i++)
+                    for (int j = 0; j < 20; j++)
                     {
-                        items.Append(c.item[i].netID + "," + c.item[i].stack + "," + c.item[i].prefix);
-                        if (i != 20)
+                        items.Append(c.item[j].netID + "," + c.item[j].stack + "," + c.item[j].prefix);
+                        if (j != 20)
                         {
                             items.Append(",");
                         }
                     }
-                    Database.Query("INSERT INTO Chests (X, Y, Items, WorldID) VALUES (@0, @1, @2, @3)", c.x, c.y, items.ToString(), Main.worldID);
+                    Database.Query("INSERT INTO Chests (X, Y, Account, Items, WorldID) VALUES (@0, @1, '', @2, @3)",
+                        c.x, c.y, items.ToString(), Main.worldID);
                     converted++;
                     items.Clear();
+                    Main.chest[i] = null;
                 }
             }
             e.Player.SendMessage(string.Format("Converted {0} chest{1}.", converted, converted == 1 ? "" : "s"));
