@@ -221,8 +221,8 @@ namespace InfiniteChests
                 switch (infos[plr].action)
                 {
                     case ChestAction.INFO:
-                        player.SendMessage(string.Format("X: {0} Y: {1} Account: {2} {3} Refill: {4} ({5} second{6}) Region: {7}",
-                            X, Y, chest.account == "" ? "N/A" : chest.account, ((chest.flags & ChestFlags.PUBLIC) != 0) ? "(public)" : "",
+                        player.SendMessage(string.Format("X: {0} Y: {1} Account: {2} {3}Refill: {4} ({5} second{6}) Region: {7}",
+                            X, Y, chest.account == "" ? "N/A" : chest.account, ((chest.flags & ChestFlags.PUBLIC) != 0) ? "(public) " : "",
                             (chest.flags & ChestFlags.REFILL) != 0, (int)chest.flags / 8, (int)chest.flags / 8 == 1 ? "" : "s",
                             (chest.flags & ChestFlags.REGION) != 0), Color.Yellow);
                         break;
@@ -247,12 +247,12 @@ namespace InfiniteChests
                             player.SendMessage("This chest is not yours.", Color.Red);
                             break;
                         }
-                        Database.Query("UPDATE Chests SET Flags = (Flags ^ 1) WHERE X = @0 AND Y = @1 AND WorldID = @2",
+                        Database.Query("UPDATE Chests SET Flags = ((~(Flags & 1)) & (Flags | 1)) WHERE X = @0 AND Y = @1 AND WorldID = @2",
                             X, Y, Main.worldID);
                         player.SendMessage(string.Format("This chest is now {0}.", (chest.flags & ChestFlags.PUBLIC) != 0 ? "private" : "public"));
                         break;
                     case ChestAction.REFILL:
-                        if (chest.account != player.UserAccountName)
+                        if (chest.account != player.UserAccountName && chest.account != "")
                         {
                             player.SendMessage("This chest is not yours.", Color.Red);
                             break;
@@ -266,7 +266,7 @@ namespace InfiniteChests
                         }
                         else
                         {
-                            Database.Query("UPDATE Chests SET Flags = (Flags ^ 4) & 7 WHERE X = @0 AND Y = @1 AND WorldID = @2",
+                            Database.Query("UPDATE Chests SET Flags = ((~(Flags & 4)) & (Flags | 4)) & 7 WHERE X = @0 AND Y = @1 AND WorldID = @2",
                                 X, Y, Main.worldID);
                             player.SendMessage(string.Format("This chest will {0} refill.", (chest.flags & ChestFlags.REFILL) != 0 ? "no longer" : "now"));
                         }
@@ -282,7 +282,7 @@ namespace InfiniteChests
                             player.SendMessage("This chest is not yours.", Color.Red);
                             break;
                         }
-                        Database.Query("UPDATE Chests SET Flags = (Flags ^ 2) WHERE X = @0 AND Y = @1 AND WorldID = @2",
+                        Database.Query("UPDATE Chests SET Flags = ((~(Flags & 2)) & (Flags | 2)) WHERE X = @0 AND Y = @1 AND WorldID = @2",
                             X, Y, Main.worldID);
                         player.SendMessage(string.Format("This chest is {0} region shared.", (chest.flags & ChestFlags.REGION) != 0 ? "no longer" : "now"));
                         break;
