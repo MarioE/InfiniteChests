@@ -32,7 +32,8 @@ namespace InfiniteChests
     public struct PlayerInfo
     {
         public ChestAction action;
-        public Point loc;
         public int time;
+        public int x;
+        public int y;
     }
 }

@@ -71,13 +71,14 @@ namespace InfiniteChests
         {
             if (!e.Handled)
             {
+                int index = e.Msg.whoAmI;
                 switch (e.MsgID)
                 {
                     case PacketTypes.ChestGetContents:
                         {
                             int X = BitConverter.ToInt32(e.Msg.readBuffer, e.Index);
                             int Y = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 4);
-                            GetChest(X, Y, e.Msg.whoAmI);
+                            GetChest(X, Y, index);
                             e.Handled = true;
                         }
                         break;
@@ -91,7 +92,16 @@ namespace InfiniteChests
                             byte stack = e.Msg.readBuffer[e.Index + 3];
                             byte prefix = e.Msg.readBuffer[e.Index + 4];
                             int netID = BitConverter.ToInt16(e.Msg.readBuffer, e.Index + 5);
-                            ModChest(e.Msg.whoAmI, slot, netID, stack, prefix);
+                            ModChest(index, slot, netID, stack, prefix);
+
+                            for (int i = 0; i < 256; i++)
+                            {
+                                if (infos[i].x == infos[index].x && infos[i].y == infos[index].y && i != index)
+                                {
+                                    byte[] raw = new byte[] { 8, 0, 0, 0, 32, 0, 0, slot, stack, prefix, (byte)netID, (byte)(netID >> 8) };
+                                    TShock.Players[i].SendRawData(raw);
+                                }
+                            }
                             e.Handled = true;
                         }
                         break;
@@ -101,11 +111,11 @@ namespace InfiniteChests
                             {
                                 int X = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 1);
                                 int Y = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 5);
-                                if (TShock.Regions.CanBuild(X, Y, TShock.Players[e.Msg.whoAmI]))
+                                if (TShock.Regions.CanBuild(X, Y, TShock.Players[index]))
                                 {
-                                    PlaceChest(X, Y, e.Msg.whoAmI);
+                                    PlaceChest(X, Y, index);
                                     WorldGen.PlaceChest(X, Y, 21, false, e.Msg.readBuffer[e.Index + 10]);
-                                    NetMessage.SendData((int)PacketTypes.Tile, -1, e.Msg.whoAmI, "", 1, X, Y, 21, e.Msg.readBuffer[e.Index + 10]);
+                                    NetMessage.SendData((int)PacketTypes.Tile, -1, index, "", 1, X, Y, 21, e.Msg.readBuffer[e.Index + 10]);
                                     e.Handled = true;
                                 }
                             }
@@ -115,7 +125,7 @@ namespace InfiniteChests
                         {
                             int X = BitConverter.ToInt32(e.Msg.readBuffer, e.Index);
                             int Y = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 4);
-                            if (TShock.Regions.CanBuild(X, Y, TShock.Players[e.Msg.whoAmI]) && Main.tile[X, Y].type == 21)
+                            if (TShock.Regions.CanBuild(X, Y, TShock.Players[index]) && Main.tile[X, Y].type == 21)
                             {
                                 if (Main.tile[X, Y].frameY != 0)
                                 {
@@ -125,8 +135,8 @@ namespace InfiniteChests
                                 {
                                     X--;
                                 }
-                                KillChest(X, Y, e.Msg.whoAmI);
-                                TShock.Players[e.Msg.whoAmI].SendTileSquare(X, Y, 3);
+                                KillChest(X, Y, index);
+                                TShock.Players[index].SendTileSquare(X, Y, 3);
                                 e.Handled = true;
                             }
                         }
@@ -327,14 +337,16 @@ namespace InfiniteChests
                             raw[7] = (byte)i;
                             raw[8] = (byte)itemArgs[i * 3 + 1];
                             raw[9] = (byte)itemArgs[i * 3 + 2];
-                            Buffer.BlockCopy(BitConverter.GetBytes((short)itemArgs[i * 3]), 0, raw, 10, 2);
+                            raw[10] = (byte)itemArgs[i * 3];
+                            raw[11] = (byte)(itemArgs[i * 3] >> 8);
                             player.SendRawData(raw);
                         }
                         byte[] raw2 = new byte[] { 11, 0, 0, 0, 33, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255 };
                         Buffer.BlockCopy(BitConverter.GetBytes(X), 0, raw2, 7, 4);
                         Buffer.BlockCopy(BitConverter.GetBytes(Y), 0, raw2, 11, 4);
                         player.SendRawData(raw2);
-                        infos[plr].loc = new Point(X, Y);
+                        infos[plr].x = X;
+                        infos[plr].y = Y;
                         break;
                 }
                 infos[plr].action = ChestAction.NONE;
@@ -374,7 +386,7 @@ namespace InfiniteChests
         {
             Chest chest = null;
             using (QueryResult reader = Database.QueryReader("SELECT Flags, Items FROM Chests WHERE X = @0 AND Y = @1 AND WorldID = @2",
-                infos[plr].loc.X, infos[plr].loc.Y, Main.worldID))
+                infos[plr].x, infos[plr].y, Main.worldID))
             {
                 if (reader.Read())
                 {
@@ -387,9 +399,9 @@ namespace InfiniteChests
             {
                 if ((chest.flags & ChestFlags.REFILL) != 0)
                 {
-                    if (!Timer.ContainsKey(new Point(infos[plr].loc.X, infos[plr].loc.Y)))
+                    if (!Timer.ContainsKey(new Point(infos[plr].x, infos[plr].y)))
                     {
-                        Timer.Add(new Point(infos[plr].loc.X, infos[plr].loc.Y), (int)chest.flags >> 3);
+                        Timer.Add(new Point(infos[plr].x, infos[plr].y), (int)chest.flags >> 3);
                     }
                 }
                 else
@@ -413,7 +425,7 @@ namespace InfiniteChests
                         }
                     }
                     Database.Query("UPDATE Chests SET Items = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
-                        newItems.ToString(), infos[plr].loc.X, infos[plr].loc.Y, Main.worldID);
+                        newItems.ToString(), infos[plr].x, infos[plr].y, Main.worldID);
                 }
             }
         }
