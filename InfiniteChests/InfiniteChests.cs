@@ -93,15 +93,6 @@ namespace InfiniteChests
                             byte prefix = e.Msg.readBuffer[e.Index + 4];
                             int netID = BitConverter.ToInt16(e.Msg.readBuffer, e.Index + 5);
                             ModChest(index, slot, netID, stack, prefix);
-
-                            for (int i = 0; i < 256; i++)
-                            {
-                                if (infos[i].x == infos[index].x && infos[i].y == infos[index].y && i != index)
-                                {
-                                    byte[] raw = new byte[] { 8, 0, 0, 0, 32, 0, 0, slot, stack, prefix, (byte)netID, (byte)(netID >> 8) };
-                                    TShock.Players[i].SendRawData(raw);
-                                }
-                            }
                             e.Handled = true;
                         }
                         break;
@@ -382,7 +373,7 @@ namespace InfiniteChests
                 TSPlayer.All.SendData(PacketTypes.Tile, "", 0, X, Y + 1);
             }
         }
-        void ModChest(int plr, int slot, int ID, int stack, int prefix)
+        void ModChest(int plr, byte slot, int ID, byte stack, byte prefix)
         {
             Chest chest = null;
             using (QueryResult reader = Database.QueryReader("SELECT Flags, Items FROM Chests WHERE X = @0 AND Y = @1 AND WorldID = @2",
@@ -426,6 +417,15 @@ namespace InfiniteChests
                     }
                     Database.Query("UPDATE Chests SET Items = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
                         newItems.ToString(), infos[plr].x, infos[plr].y, Main.worldID);
+
+                    for (int i = 0; i < 256; i++)
+                    {
+                        if (infos[i].x == infos[plr].x && infos[i].y == infos[plr].y && i != plr)
+                        {
+                            byte[] raw = new byte[] { 8, 0, 0, 0, 32, 0, 0, slot, stack, prefix, (byte)ID, (byte)(ID >> 8) };
+                            TShock.Players[i].SendRawData(raw);
+                        }
+                    }
                 }
             }
         }
