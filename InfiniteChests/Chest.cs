@@ -8,6 +8,7 @@ namespace InfiniteChests
         public ChestFlags flags;
         public string items;
         public Point loc;
+        public string password = "";
     }
 
     [Flags]
@@ -26,12 +27,14 @@ namespace InfiniteChests
         REFILL,
         REGION,
         PUBLIC,
-        INFO
+        INFO,
+        SETPASS
     }
 
-    public struct PlayerInfo
+    public class PlayerInfo
     {
         public ChestAction action;
+        public string password = "";
         public int time;
         public int x;
         public int y;
