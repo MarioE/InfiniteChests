@@ -352,11 +352,6 @@ namespace InfiniteChests
 								Infos[plr].password = "";
 							}
 						}
-						if (Infos.Any(p => p.x == X && p.y == Y))
-						{
-							player.SendMessage("This chest is in use.", Color.Red);
-							break;
-						}
 						int timeLeft;
 						if (Timer.TryGetValue(new Point(X, Y), out timeLeft) && timeLeft > 0)
 						{
