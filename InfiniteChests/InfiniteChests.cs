@@ -138,16 +138,16 @@ namespace InfiniteChests
 		}
 		void OnInitialize()
 		{
-			Commands.ChatCommands.Add(new Command("protectchest", Deselect, "ccset"));
-			Commands.ChatCommands.Add(new Command("showchestinfo", Info, "cinfo"));
-			Commands.ChatCommands.Add(new Command("protectchest", Lock, "clock") { DoLog = false });
-			Commands.ChatCommands.Add(new Command("maintenance", ConvertChests, "convchests"));
-			Commands.ChatCommands.Add(new Command("protectchest", PublicProtect, "cpset"));
-			Commands.ChatCommands.Add(new Command("refillchest", Refill, "crefill"));
-			Commands.ChatCommands.Add(new Command("protectchest", RegionProtect, "crset"));
-			Commands.ChatCommands.Add(new Command("protectchest", Protect, "cset"));
-			Commands.ChatCommands.Add(new Command(Unlock, "cunlock") { DoLog = false });
-			Commands.ChatCommands.Add(new Command("protectchest", Unprotect, "cunset"));
+			Commands.ChatCommands.Add(new Command("infchests.chest.deselect", Deselect, "ccset"));
+			Commands.ChatCommands.Add(new Command("infchests.admin.info", Info, "cinfo"));
+			Commands.ChatCommands.Add(new Command("infchests.chest.lock", Lock, "clock") { DoLog = false });
+			Commands.ChatCommands.Add(new Command("infchests.admin.convert", ConvertChests, "convchests"));
+			Commands.ChatCommands.Add(new Command("infchests.chest.public", PublicProtect, "cpset"));
+			Commands.ChatCommands.Add(new Command("infchests.admin.refill", Refill, "crefill"));
+			Commands.ChatCommands.Add(new Command("infchests.chest.region", RegionProtect, "crset"));
+			Commands.ChatCommands.Add(new Command("infchests.chest.protect", Protect, "cset"));
+			Commands.ChatCommands.Add(new Command("infchests.chest.unlock", Unlock, "cunlock") { DoLog = false });
+			Commands.ChatCommands.Add(new Command("infchests.chest.unprotect", Unprotect, "cunset"));
 
 			switch (TShock.Config.StorageType.ToLower())
 			{
@@ -252,7 +252,7 @@ namespace InfiniteChests
 							player.SendMessage("This chest is not protected.", Color.Red);
 							break;
 						}
-						if (chest.account != player.UserAccountName)
+						if (chest.account != player.UserAccountName && !player.Group.HasPermission("infchests.admin.editall"))
 						{
 							player.SendMessage("This chest is not yours.", Color.Red);
 							break;
@@ -263,7 +263,7 @@ namespace InfiniteChests
 							(chest.flags & ChestFlags.PUBLIC) != 0 ? "private" : "public"), Color.Green);
 						break;
 					case ChestAction.REFILL:
-						if (chest.account != player.UserAccountName && chest.account != "")
+						if (chest.account != player.UserAccountName && chest.account != "" && !player.Group.HasPermission("infchests.admin.editall"))
 						{
 							player.SendMessage("This chest is not yours.", Color.Red);
 							break;
@@ -289,7 +289,7 @@ namespace InfiniteChests
 							player.SendMessage("This chest is not protected.", Color.Red);
 							break;
 						}
-						if (chest.account != player.UserAccountName)
+						if (chest.account != player.UserAccountName && !player.Group.HasPermission("infchests.admin.editall"))
 						{
 							player.SendMessage("This chest is not yours.", Color.Red);
 							break;
@@ -305,13 +305,21 @@ namespace InfiniteChests
 							player.SendMessage("This chest is not protected.", Color.Red);
 							break;
 						}
-						if (chest.account != player.UserAccountName)
+						if (chest.account != player.UserAccountName && !player.Group.HasPermission("infchests.admin.editall"))
 						{
 							player.SendMessage("This chest is not yours.", Color.Red);
 							break;
 						}
-						Database.Query("UPDATE Chests SET Password = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
-							TShock.Utils.HashPassword(Infos[plr].password), X, Y, Main.worldID);
+						if (Infos[plr].password != "remove")
+						{
+							Database.Query("UPDATE Chests SET Password = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
+								"", X, Y, Main.worldID);
+						}
+						else
+						{
+							Database.Query("UPDATE Chests SET Password = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
+								TShock.Utils.HashPassword(Infos[plr].password), X, Y, Main.worldID);
+						}
 						player.SendMessage("This chest is now password protected.", Color.Green);
 						break;
 					case ChestAction.UNPROTECT:
@@ -320,7 +328,7 @@ namespace InfiniteChests
 							player.SendMessage("This chest is not protected.", Color.Red);
 							break;
 						}
-						if (chest.account != player.UserAccountName && !player.Group.HasPermission("removechestprotection"))
+						if (chest.account != player.UserAccountName && !player.Group.HasPermission("infchests.admin.editall"))
 						{
 							player.SendMessage("This chest is not yours.", Color.Red);
 							break;
@@ -331,7 +339,7 @@ namespace InfiniteChests
 						break;
 					default:
 						bool isFree = chest.account == "";
-						bool isOwner = chest.account == player.UserAccountName || player.Group.HasPermission("openallchests");
+						bool isOwner = chest.account == player.UserAccountName || player.Group.HasPermission("infchests.admin.editall");
 						bool isPub = (chest.flags & ChestFlags.PUBLIC) == ChestFlags.PUBLIC;
 						bool isRegion = (chest.flags & ChestFlags.REGION) == ChestFlags.REGION && TShock.Regions.CanBuild(X, Y, player);
 						if (!isFree && !isOwner && !isPub && !isRegion)
@@ -399,7 +407,7 @@ namespace InfiniteChests
 			}
 			TSPlayer player = TShock.Players[plr];
 
-			if (chest != null && chest.account != player.UserAccountName && chest.account != "")
+			if (chest != null && chest.account != player.UserAccountName && chest.account != "" && !player.Group.HasPermission("infchests.admin.editall"))
 			{
 				player.SendMessage("This chest is protected.", Color.Red);
 				player.SendTileSquare(X, Y, 3);
@@ -525,9 +533,17 @@ namespace InfiniteChests
 				e.Player.SendMessage("Invalid syntax! Proper syntax: /clock <password>", Color.Red);
 				return;
 			}
+
 			Infos[e.Player.Index].action = ChestAction.SETPASS;
 			Infos[e.Player.Index].password = e.Parameters[0];
-			e.Player.SendMessage("Open chest to enable a password on it.", Color.Yellow);
+			if (e.Parameters[0].ToLower() == "remove")
+			{
+				e.Player.SendMessage("Open chest to disable a password on it.", Color.Yellow);
+			}
+			else
+			{
+				e.Player.SendMessage("Open chest to enable a password on it.", Color.Yellow);
+			}
 		}
 		void Protect(CommandArgs e)
 		{
