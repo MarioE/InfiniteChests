@@ -484,7 +484,7 @@ namespace InfiniteChests
 		{
 			TSPlayer player = TShock.Players[plr];
 			Database.Query("INSERT INTO Chests (X, Y, Account, Flags, Items, Password, WorldID) VALUES (@0, @1, @2, @3, @4, \'\', @5)",
-				X, Y - 1, player.IsLoggedIn ? player.UserAccountName : "", 0,
+				X, Y - 1, (player.IsLoggedIn && player.Group.HasPermission("infchests.chest.protect")) ? player.UserAccountName : "", 0,
 				"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0", Main.worldID);
 			Main.chest[0] = null;
 		}
