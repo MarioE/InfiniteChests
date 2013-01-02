@@ -20,8 +20,6 @@ namespace InfiniteChests
 	{
         public static event Action<ChestOpenEventArgs> ChestOpen;
         public static event Action<ChestItemEventArgs> ChestItem;
-       // public static event Action<ChestEventArgs> SignRead;
-
 		public override string Author
 		{
 			get { return "MarioE"; }
