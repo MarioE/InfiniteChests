@@ -381,7 +381,7 @@ namespace InfiniteChests
                         {
                             items[i] = new NetItem { netID = itemArgs[i * 3], stack = itemArgs[i * 3 + 1], prefix = itemArgs[i * 3 + 2] };
                         }
-                        ChestOpenEventArgs args = new ChestOpenEventArgs(X, Y, items, chest.account, chest.flags);
+                        ChestOpenEventArgs args = new ChestOpenEventArgs(X, Y, plr, items, chest.account, chest.flags);
                         if (ChestOpen != null)
                             ChestOpen(args);
                         if (args.Handled)
@@ -470,7 +470,7 @@ namespace InfiniteChests
                         itemArgs[i] = Convert.ToInt32(split[i]);
                     }
 
-                    ChestItemEventArgs args = new ChestItemEventArgs(Infos[plr].x, Infos[plr].y, new NetItem { netID = ID, stack = stack, prefix = prefix }, new NetItem { netID = itemArgs[slot * 3], stack = itemArgs[slot * 3 + 1], prefix = itemArgs[slot * 3 + 2] }, slot, chest.account, chest.flags);
+                    ChestItemEventArgs args = new ChestItemEventArgs(Infos[plr].x, Infos[plr].y, plr, new NetItem { netID = ID, stack = stack, prefix = prefix }, new NetItem { netID = itemArgs[slot * 3], stack = itemArgs[slot * 3 + 1], prefix = itemArgs[slot * 3 + 2] }, slot, chest.account, chest.flags);
                     if (ChestItem != null)
                         ChestItem(args);
                     if (args.Handled)
@@ -631,23 +631,25 @@ namespace InfiniteChests
 	}
     public class ChestOpenEventArgs : HandledEventArgs
     {
-        public ChestOpenEventArgs(int x, int y, NetItem[] items, string account, ChestFlags flags)
+        public ChestOpenEventArgs(int x, int y, int playerid, NetItem[] items, string account, ChestFlags flags)
         {
             this.X = x;
             this.Y = y;
             this.Items = items;
             this.Account = account;
             this.Flags = flags;
+            this.Who = playerid;
         }
         public int X;
         public int Y;
         public NetItem[] Items;
         public string Account;
+        public int Who;
         public ChestFlags Flags;
     }
     public class ChestItemEventArgs : HandledEventArgs
     {
-        public ChestItemEventArgs(int x, int y, NetItem itemIn, NetItem itemOut, int slot, string account, ChestFlags flags)
+        public ChestItemEventArgs(int x, int y, int playerid, NetItem itemIn, NetItem itemOut, int slot, string account, ChestFlags flags)
         {
             this.X = x;
             this.Y = y;
@@ -656,6 +658,7 @@ namespace InfiniteChests
             this.Account = account;
             this.Flags = flags;
             this.Slot = slot;
+            this.Who = playerid;
         }
         public int X;
         public int Y;
@@ -663,6 +666,7 @@ namespace InfiniteChests
         public NetItem ItemTakenOut;
         public int Slot;
         public string Account;
+        public int Who;
         public ChestFlags Flags;
     }
 }
