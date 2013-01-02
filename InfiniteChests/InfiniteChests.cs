@@ -469,8 +469,26 @@ namespace InfiniteChests
                     {
                         itemArgs[i] = Convert.ToInt32(split[i]);
                     }
-
-                    ChestItemEventArgs args = new ChestItemEventArgs(Infos[plr].x, Infos[plr].y, plr, new NetItem { netID = ID, stack = stack, prefix = prefix }, new NetItem { netID = itemArgs[slot * 3], stack = itemArgs[slot * 3 + 1], prefix = itemArgs[slot * 3 + 2] }, slot, chest.account, chest.flags);
+                    var itemIn = new NetItem { netID = ID, stack = stack, prefix = prefix };
+                    var itemOut = new NetItem { netID = itemArgs[slot * 3], stack = itemArgs[slot * 3 + 1], prefix = itemArgs[slot * 3 + 2] };
+                    if (itemIn.netID == itemOut.netID && itemIn.prefix == itemOut.prefix)
+                    {
+                        if (itemOut.stack >= itemIn.stack) // item beeing taken out
+                        {
+                            itemOut.stack -= itemIn.stack;
+                            itemIn.netID = 0;
+                            itemIn.prefix = 0;
+                            itemIn.stack = 0;
+                        }
+                        else // item beeing put in
+                        {
+                            itemIn.stack -= itemOut.stack;
+                            itemOut.netID = 0;
+                            itemOut.prefix = 0;
+                            itemOut.stack = 0;
+                        }
+                    }
+                    ChestItemEventArgs args = new ChestItemEventArgs(Infos[plr].x, Infos[plr].y, plr, itemIn, itemOut, slot, chest.account, chest.flags);
                     if (ChestItem != null)
                         ChestItem(args);
                     if (args.Handled)
