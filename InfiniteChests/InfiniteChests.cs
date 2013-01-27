@@ -313,10 +313,10 @@ namespace InfiniteChests
 							player.SendMessage("This chest is not yours.", Color.Red);
 							break;
 						}
-						if (Infos[plr].password != "remove")
+						if (Infos[plr].password.ToLower() == "remove")
 						{
-							Database.Query("UPDATE Chests SET Password = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
-								"", X, Y, Main.worldID);
+							Database.Query("UPDATE Chests SET Password = '' WHERE X = @0 AND Y = @1 AND WorldID = @2",
+								X, Y, Main.worldID);
 						}
 						else
 						{
