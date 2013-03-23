@@ -106,6 +106,13 @@ namespace InfiniteChests
 							{
 								int X = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 1);
 								int Y = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 5);
+								if ((TShock.Utils.TileValid(X, Y + 1) && Main.tile[X, Y + 1].type == 138) ||
+									(TShock.Utils.TileValid(X + 1, Y + 1) && Main.tile[X + 1, Y + 1].type == 138))
+								{
+									TShock.Players[index].SendTileSquare(X, Y, 3);
+									e.Handled = true;
+									return;
+								}
 								if (TShock.Regions.CanBuild(X, Y, TShock.Players[index]))
 								{
 									PlaceChest(X, Y, index);
