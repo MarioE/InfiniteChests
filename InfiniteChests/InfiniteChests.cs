@@ -46,7 +46,7 @@ namespace InfiniteChests
 			{
 				Infos[i] = new PlayerInfo();
 			}
-			Order = -1;
+			Order = 1;
 		}
 
 		protected override void Dispose(bool disposing)
