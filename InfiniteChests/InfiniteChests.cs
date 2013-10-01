@@ -6,20 +6,18 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
-using Hooks;
 using Mono.Data.Sqlite;
 using MySql.Data.MySqlClient;
 using Terraria;
+using TerrariaApi.Server;
 using TShockAPI;
 using TShockAPI.DB;
 
 namespace InfiniteChests
 {
-	[APIVersion(1, 12)]
+	[ApiVersion(1, 14)]
 	public class InfiniteChests : TerrariaPlugin
 	{
-        public static event Action<ChestOpenEventArgs> ChestOpen;
-        public static event Action<ChestItemEventArgs> ChestItem;
 		public override string Author
 		{
 			get { return "MarioE"; }
@@ -55,20 +53,20 @@ namespace InfiniteChests
 		{
 			if (disposing)
 			{
-				NetHooks.GetData -= OnGetData;
-				GameHooks.Initialize -= OnInitialize;
-				GameHooks.Update -= OnUpdate;
-				ServerHooks.Leave -= OnLeave;
+				ServerApi.Hooks.NetGetData.Deregister(this, OnGetData);
+				ServerApi.Hooks.GameInitialize.Deregister(this, OnInitialize);
+				ServerApi.Hooks.GameUpdate.Deregister(this, OnUpdate);
+				ServerApi.Hooks.ServerLeave.Deregister(this, OnLeave);
 
 				Database.Dispose();
 			}
 		}
 		public override void Initialize()
 		{
-			NetHooks.GetData += OnGetData;
-			GameHooks.Initialize += OnInitialize;
-			GameHooks.Update += OnUpdate;
-			ServerHooks.Leave += OnLeave;
+			ServerApi.Hooks.NetGetData.Register(this, OnGetData);
+			ServerApi.Hooks.GameInitialize.Register(this, OnInitialize);
+			ServerApi.Hooks.GameUpdate.Register(this, OnUpdate);
+			ServerApi.Hooks.ServerLeave.Register(this, OnLeave);
 		}
 
 		void OnGetData(GetDataEventArgs e)
@@ -89,13 +87,13 @@ namespace InfiniteChests
 					case PacketTypes.ChestItem:
 						{
 							byte slot = e.Msg.readBuffer[e.Index + 2];
-							if (slot > 20)
+							if (slot > 40)
 							{
 								return;
 							}
-							byte stack = e.Msg.readBuffer[e.Index + 3];
-							byte prefix = e.Msg.readBuffer[e.Index + 4];
-							int netID = BitConverter.ToInt16(e.Msg.readBuffer, e.Index + 5);
+							short stack = BitConverter.ToInt16(e.Msg.readBuffer, e.Index + 3);
+							byte prefix = e.Msg.readBuffer[e.Index + 5];
+							int netID = BitConverter.ToInt16(e.Msg.readBuffer, e.Index + 6);
 							ModChest(index, slot, netID, stack, prefix);
 							e.Handled = true;
 						}
@@ -106,8 +104,8 @@ namespace InfiniteChests
 							{
 								int X = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 1);
 								int Y = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 5);
-								if ((TShock.Utils.TileValid(X, Y + 1) && Main.tile[X, Y + 1].type == 138) ||
-									(TShock.Utils.TileValid(X + 1, Y + 1) && Main.tile[X + 1, Y + 1].type == 138))
+								if ((TShock.Utils.TilePlacementValid(X, Y + 1) && Main.tile[X, Y + 1].type == 138) ||
+									(TShock.Utils.TilePlacementValid(X + 1, Y + 1) && Main.tile[X + 1, Y + 1].type == 138))
 								{
 									TShock.Players[index].SendTileSquare(X, Y, 3);
 									e.Handled = true;
@@ -146,7 +144,7 @@ namespace InfiniteChests
 				}
 			}
 		}
-		void OnInitialize()
+		void OnInitialize(EventArgs e)
 		{
 			Commands.ChatCommands.Add(new Command("infchests.chest.deselect", Deselect, "ccset"));
 			Commands.ChatCommands.Add(new Command("infchests.admin.info", Info, "cinfo"));
@@ -189,11 +187,11 @@ namespace InfiniteChests
 				new SqlColumn("Password", MySqlDbType.Text),
 				new SqlColumn("WorldID", MySqlDbType.Int32)));
 		}
-		void OnLeave(int index)
+		void OnLeave(LeaveEventArgs e)
 		{
-			Infos[index] = new PlayerInfo();
+			Infos[e.Who] = new PlayerInfo();
 		}
-		void OnUpdate()
+		void OnUpdate(EventArgs e)
 		{
 			if ((DateTime.UtcNow - LastCheck).TotalSeconds > 1)
 			{
@@ -377,31 +375,22 @@ namespace InfiniteChests
 							break;
 						}
 
-						int[] itemArgs = new int[60];
+						int[] itemArgs = new int[120];
 						string[] split = chest.items.Split(',');
-						for (int i = 0; i < 60; i++)
+						for (int i = 0; i < 120; i++)
 						{
 							itemArgs[i] = Convert.ToInt32(split[i]);
 						}
-                        NetItem[] items = new NetItem[20];
-                        for (int i = 0; i < 20; i++)
-                        {
-                            items[i] = new NetItem { netID = itemArgs[i * 3], stack = itemArgs[i * 3 + 1], prefix = itemArgs[i * 3 + 2] };
-                        }
-                        ChestOpenEventArgs args = new ChestOpenEventArgs(X, Y, plr, items, chest.account, chest.flags);
-                        if (ChestOpen != null)
-                            ChestOpen(args);
-                        if (args.Handled)
-                            return;
-
-						byte[] raw = new byte[] { 8, 0, 0, 0, 32, 0, 0, 255, 255, 255, 255, 255 };
-						for (int i = 0; i < 20; i++)
+                        
+						byte[] raw = new byte[] { 9, 0, 0, 0, 32, 0, 0, 255, 255, 255, 255, 255, 255 };
+						for (int i = 0; i < 40; i++)
 						{
 							raw[7] = (byte)i;
 							raw[8] = (byte)itemArgs[i * 3 + 1];
-							raw[9] = (byte)itemArgs[i * 3 + 2];
-							raw[10] = (byte)itemArgs[i * 3];
-							raw[11] = (byte)(itemArgs[i * 3] >> 8);
+							raw[9] = (byte)(itemArgs[i * 3 + 1] >> 8);
+							raw[10] = (byte)itemArgs[i * 3 + 2];
+							raw[11] = (byte)itemArgs[i * 3];
+							raw[12] = (byte)(itemArgs[i * 3] >> 8);
 							player.SendRawData(raw);
 						}
 
@@ -446,7 +435,7 @@ namespace InfiniteChests
 				TSPlayer.All.SendData(PacketTypes.Tile, "", 0, X, Y + 1);
 			}
 		}
-		void ModChest(int plr, byte slot, int ID, byte stack, byte prefix)
+		void ModChest(int plr, byte slot, int ID, int stack, byte prefix)
 		{
 			Chest chest = null;
             using (QueryResult reader = Database.QueryReader("SELECT Account, Flags, Items FROM Chests WHERE X = @0 AND Y = @1 AND WorldID = @2",
@@ -470,49 +459,20 @@ namespace InfiniteChests
 				}
 				else
 				{
-                    int[] itemArgs = new int[60];
+					int[] itemArgs = new int[120];
                     string[] split = chest.items.Split(',');
-                    for (int i = 0; i < 60; i++)
+					for (int i = 0; i < 120; i++)
                     {
                         itemArgs[i] = Convert.ToInt32(split[i]);
-                    }
-                    var itemIn = new NetItem { netID = ID, stack = stack, prefix = prefix };
-                    var itemOut = new NetItem { netID = itemArgs[slot * 3], stack = itemArgs[slot * 3 + 1], prefix = itemArgs[slot * 3 + 2] };
-                    if (itemIn.netID == itemOut.netID && itemIn.prefix == itemOut.prefix)
-                    {
-                        if (itemOut.stack >= itemIn.stack) // item beeing taken out
-                        {
-                            itemOut.stack -= itemIn.stack;
-                            itemIn.netID = 0;
-                            itemIn.prefix = 0;
-                            itemIn.stack = 0;
-                        }
-                        else // item beeing put in
-                        {
-                            itemIn.stack -= itemOut.stack;
-                            itemOut.netID = 0;
-                            itemOut.prefix = 0;
-                            itemOut.stack = 0;
-                        }
-                    }
-                    ChestItemEventArgs args = new ChestItemEventArgs(Infos[plr].x, Infos[plr].y, plr, itemIn, itemOut, slot, chest.account, chest.flags);
-                    if (ChestItem != null)
-                        ChestItem(args);
-                    if (args.Handled)
-                    {
-                        player.SendMessage("Another plugin is preventing the modification of items in this chest!", Color.Red);
-                        byte[] raw2 = new byte[] { 11, 0, 0, 0, 33, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255 };
-                        player.SendRawData(raw2);
-                        return;
                     }
 					itemArgs[slot * 3] = ID;
 					itemArgs[slot * 3 + 1] = stack;
 					itemArgs[slot * 3 + 2] = prefix;
 					StringBuilder newItems = new StringBuilder();
-					for (int i = 0; i < 60; i++)
+					for (int i = 0; i < 120; i++)
 					{
 						newItems.Append(itemArgs[i]);
-						if (i != 59)
+						if (i != 119)
 						{
 							newItems.Append(',');
 						}
@@ -524,7 +484,7 @@ namespace InfiniteChests
 					{
 						if (Infos[i].x == Infos[plr].x && Infos[i].y == Infos[plr].y && i != plr)
 						{
-							byte[] raw = new byte[] { 8, 0, 0, 0, 32, 0, 0, slot, stack, prefix, (byte)ID, (byte)(ID >> 8) };
+							byte[] raw = new byte[] { 9, 0, 0, 0, 32, 0, 0, slot, (byte)stack, (byte)(stack >> 8), prefix, (byte)ID, (byte)(ID >> 8) };
 							TShock.Players[i].SendRawData(raw);
 						}
 					}
@@ -536,6 +496,7 @@ namespace InfiniteChests
 			TSPlayer player = TShock.Players[plr];
 			Database.Query("INSERT INTO Chests (X, Y, Account, Flags, Items, Password, WorldID) VALUES (@0, @1, @2, @3, @4, \'\', @5)",
 				X, Y - 1, (player.IsLoggedIn && player.Group.HasPermission("infchests.chest.protect")) ? player.UserAccountName : "", 0,
+				"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0," +
 				"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0", Main.worldID);
 			Main.chest[0] = null;
 		}
@@ -654,44 +615,4 @@ namespace InfiniteChests
 			e.Player.SendMessage("Open a chest to unprotect it.", Color.Yellow);
 		}
 	}
-    public class ChestOpenEventArgs : HandledEventArgs
-    {
-        public ChestOpenEventArgs(int x, int y, int playerid, NetItem[] items, string account, ChestFlags flags)
-        {
-            this.X = x;
-            this.Y = y;
-            this.Items = items;
-            this.Account = account;
-            this.Flags = flags;
-            this.Who = playerid;
-        }
-        public int X;
-        public int Y;
-        public NetItem[] Items;
-        public string Account;
-        public int Who;
-        public ChestFlags Flags;
-    }
-    public class ChestItemEventArgs : HandledEventArgs
-    {
-        public ChestItemEventArgs(int x, int y, int playerid, NetItem itemIn, NetItem itemOut, int slot, string account, ChestFlags flags)
-        {
-            this.X = x;
-            this.Y = y;
-            this.ItemPutIn = itemIn;
-            this.ItemTakenOut = itemOut;
-            this.Account = account;
-            this.Flags = flags;
-            this.Slot = slot;
-            this.Who = playerid;
-        }
-        public int X;
-        public int Y;
-        public NetItem ItemPutIn;
-        public NetItem ItemTakenOut;
-        public int Slot;
-        public string Account;
-        public int Who;
-        public ChestFlags Flags;
-    }
 }
