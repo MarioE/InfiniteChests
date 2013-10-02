@@ -512,10 +512,10 @@ namespace InfiniteChests
 				Terraria.Chest c = Main.chest[i];
 				if (c != null)
 				{
-					for (int j = 0; j < 20; j++)
+					for (int j = 0; j < 40; j++)
 					{
 						items.Append(c.item[j].netID + "," + c.item[j].stack + "," + c.item[j].prefix);
-						if (j != 20)
+						if (j != 39)
 						{
 							items.Append(",");
 						}
