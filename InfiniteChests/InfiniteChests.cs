@@ -504,7 +504,7 @@ namespace InfiniteChests
 
 		void ConvertChests(CommandArgs e)
 		{
-			if (e.Parameters.Count == 0 || e.Parameters[0] != "true") Database.Query("DELETE FROM Chests WHERE WorldID = @0", Main.worldID);
+			if (e.Parameters.Count > 0 && e.Parameters[0] == "true") Database.Query("DELETE FROM Chests WHERE WorldID = @0", Main.worldID);
 			int converted = 0;
 			StringBuilder items = new StringBuilder();
 			for (int i = 0; i < 1000; i++)
