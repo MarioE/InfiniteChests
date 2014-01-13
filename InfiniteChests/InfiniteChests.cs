@@ -1,11 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Data;
 using System.IO;
-using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Threading;
+using System.Timers;
 using Mono.Data.Sqlite;
 using MySql.Data.MySqlClient;
 using Terraria;
@@ -18,22 +18,23 @@ namespace InfiniteChests
 	[ApiVersion(1, 14)]
 	public class InfiniteChests : TerrariaPlugin
 	{
+		IDbConnection Database;
+		PlayerInfo[] Infos = new PlayerInfo[256];
+		System.Timers.Timer Timer = new System.Timers.Timer(1000);
+		Dictionary<Point, int> Timers = new Dictionary<Point, int>();
+
 		public override string Author
 		{
 			get { return "MarioE"; }
 		}
-		private IDbConnection Database;
 		public override string Description
 		{
 			get { return "Allows for infinite chests, and supports all chest control commands."; }
 		}
-		private PlayerInfo[] Infos = new PlayerInfo[256];
-		private DateTime LastCheck = DateTime.UtcNow;
 		public override string Name
 		{
 			get { return "InfiniteChests"; }
 		}
-		private Dictionary<Point, int> Timer = new Dictionary<Point, int>();
 		public override Version Version
 		{
 			get { return Assembly.GetExecutingAssembly().GetName().Version; }
@@ -55,20 +56,37 @@ namespace InfiniteChests
 			{
 				ServerApi.Hooks.NetGetData.Deregister(this, OnGetData);
 				ServerApi.Hooks.GameInitialize.Deregister(this, OnInitialize);
-				ServerApi.Hooks.GameUpdate.Deregister(this, OnUpdate);
 				ServerApi.Hooks.ServerLeave.Deregister(this, OnLeave);
 
 				Database.Dispose();
+				Timer.Dispose();
 			}
 		}
 		public override void Initialize()
 		{
 			ServerApi.Hooks.NetGetData.Register(this, OnGetData);
 			ServerApi.Hooks.GameInitialize.Register(this, OnInitialize);
-			ServerApi.Hooks.GameUpdate.Register(this, OnUpdate);
 			ServerApi.Hooks.ServerLeave.Register(this, OnLeave);
+
+			Timer.Elapsed += OnElapsed;
+			Timer.Start();
 		}
 
+		void OnElapsed(object o, ElapsedEventArgs e)
+		{
+			lock (Timers)
+			{
+				var newTimers = new Dictionary<Point, int>(Timers);
+				foreach (Point p in Timers.Keys)
+				{
+					if (newTimers[p] == 0)
+						newTimers.Remove(p);
+					else
+						newTimers[p]--;
+				}
+				Timers = newTimers;
+			}
+		}
 		void OnGetData(GetDataEventArgs e)
 		{
 			if (!e.Handled)
@@ -190,29 +208,6 @@ namespace InfiniteChests
 		void OnLeave(LeaveEventArgs e)
 		{
 			Infos[e.Who] = new PlayerInfo();
-		}
-		void OnUpdate(EventArgs e)
-		{
-			if ((DateTime.UtcNow - LastCheck).TotalSeconds > 1)
-			{
-				LastCheck = DateTime.UtcNow;
-				List<Point> dec = new List<Point>();
-				foreach (Point p in Timer.Keys)
-				{
-					dec.Add(p);
-				}
-				foreach (Point p in dec)
-				{
-					if (Timer[p] == 0)
-					{
-						Timer.Remove(p);
-					}
-					else
-					{
-						Timer[p]--;
-					}
-				}
-			}
 		}
 
 		void GetChest(int X, int Y, int plr)
@@ -369,10 +364,13 @@ namespace InfiniteChests
 							}
 						}
 						int timeLeft;
-						if (Timer.TryGetValue(new Point(X, Y), out timeLeft) && timeLeft > 0)
+						lock (Timers)
 						{
-							player.SendErrorMessage("This chest will refill in {0} second{1}.", timeLeft, timeLeft == 1 ? "" : "s");
-							break;
+							if (Timers.TryGetValue(new Point(X, Y), out timeLeft) && timeLeft > 0)
+							{
+								player.SendErrorMessage("This chest will refill in {0} second{1}.", timeLeft, timeLeft == 1 ? "" : "s");
+								break;
+							}
 						}
 
 						int[] itemArgs = new int[120];
@@ -443,9 +441,7 @@ namespace InfiniteChests
 				Infos[plr].x, Infos[plr].y, Main.worldID))
 			{
 				if (reader.Read())
-				{
                     chest = new Chest { flags = (ChestFlags)reader.Get<int>("Flags"), items = reader.Get<string>("Items"), account = reader.Get<string>("Account") };
-				}
 			}
 			TSPlayer player = TShock.Players[plr];
 
@@ -453,19 +449,20 @@ namespace InfiniteChests
 			{
 				if ((chest.flags & ChestFlags.REFILL) != 0)
 				{
-					if (!Timer.ContainsKey(new Point(Infos[plr].x, Infos[plr].y)))
+					lock (Timers)
 					{
-						Timer.Add(new Point(Infos[plr].x, Infos[plr].y), (int)chest.flags >> 3);
+						if (!Timers.ContainsKey(new Point(Infos[plr].x, Infos[plr].y)))
+							Timers.Add(new Point(Infos[plr].x, Infos[plr].y), (int)chest.flags >> 3);
 					}
 				}
 				else
 				{
 					int[] itemArgs = new int[120];
-                    string[] split = chest.items.Split(',');
+					string[] split = chest.items.Split(',');
 					for (int i = 0; i < 120; i++)
-                    {
-                        itemArgs[i] = Convert.ToInt32(split[i]);
-                    }
+					{
+						itemArgs[i] = Convert.ToInt32(split[i]);
+					}
 					itemArgs[slot * 3] = ID;
 					itemArgs[slot * 3 + 1] = stack;
 					itemArgs[slot * 3 + 2] = prefix;
