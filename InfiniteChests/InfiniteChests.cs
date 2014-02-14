@@ -15,7 +15,7 @@ using TShockAPI.DB;
 
 namespace InfiniteChests
 {
-	[ApiVersion(1, 14)]
+	[ApiVersion(1, 15)]
 	public class InfiniteChests : TerrariaPlugin
 	{
 		IDbConnection Database;
@@ -91,74 +91,110 @@ namespace InfiniteChests
 		{
 			if (!e.Handled)
 			{
-				int index = e.Msg.whoAmI;
-				switch (e.MsgID)
+				int plr = e.Msg.whoAmI;
+				using (var reader = new BinaryReader(new MemoryStream(e.Msg.readBuffer, e.Index, e.Length)))
 				{
-					case PacketTypes.ChestGetContents:
-						{
-							int X = BitConverter.ToInt32(e.Msg.readBuffer, e.Index);
-							int Y = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 4);
-							GetChest(X, Y, index);
-							e.Handled = true;
-						}
-						break;
-					case PacketTypes.ChestItem:
-						{
-							byte slot = e.Msg.readBuffer[e.Index + 2];
-							if (slot > 40)
+					switch (e.MsgID)
+					{
+						case PacketTypes.ChestGetContents:
 							{
-								return;
-							}
-							short stack = BitConverter.ToInt16(e.Msg.readBuffer, e.Index + 3);
-							byte prefix = e.Msg.readBuffer[e.Index + 5];
-							int netID = BitConverter.ToInt16(e.Msg.readBuffer, e.Index + 6);
-							ModChest(index, slot, netID, stack, prefix);
-							e.Handled = true;
-						}
-						break;
-					case PacketTypes.Tile:
-						{
-							if (e.Msg.readBuffer[e.Index] == 1 && e.Msg.readBuffer[e.Index + 9] == 21)
-							{
-								int X = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 1);
-								int Y = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 5);
-								if ((TShock.Utils.TilePlacementValid(X, Y + 1) && Main.tile[X, Y + 1].type == 138) ||
-									(TShock.Utils.TilePlacementValid(X + 1, Y + 1) && Main.tile[X + 1, Y + 1].type == 138))
-								{
-									TShock.Players[index].SendTileSquare(X, Y, 3);
-									e.Handled = true;
-									return;
-								}
-								if (TShock.Regions.CanBuild(X, Y, TShock.Players[index]))
-								{
-									PlaceChest(X, Y, index);
-									WorldGen.PlaceChest(X, Y, 21, false, e.Msg.readBuffer[e.Index + 10]);
-									NetMessage.SendData((int)PacketTypes.Tile, -1, index, "", 1, X, Y, 21, e.Msg.readBuffer[e.Index + 10]);
-									e.Handled = true;
-								}
-							}
-						}
-						break;
-					case PacketTypes.TileKill:
-						{
-							int X = BitConverter.ToInt32(e.Msg.readBuffer, e.Index);
-							int Y = BitConverter.ToInt32(e.Msg.readBuffer, e.Index + 4);
-							if (TShock.Regions.CanBuild(X, Y, TShock.Players[index]) && Main.tile[X, Y].type == 21)
-							{
-								if (Main.tile[X, Y].frameY != 0)
-								{
-									Y--;
-								}
-								if (Main.tile[X, Y].frameX % 36 != 0)
-								{
-									X--;
-								}
-								KillChest(X, Y, index);
-								TShock.Players[index].SendTileSquare(X, Y, 3);
+								int x = reader.ReadInt32();
+								int y = reader.ReadInt32();
+								GetChest(x, y, plr);
 								e.Handled = true;
 							}
-						}
-						break;
+							break;
+						case PacketTypes.ChestItem:
+							{
+								reader.ReadInt16();
+								byte slot = reader.ReadByte();
+								if (slot > 40)
+									return;
+
+								int stack = reader.ReadInt16();
+								byte prefix = reader.ReadByte();
+								int netID = reader.ReadInt16();
+								ModChest(plr, slot, netID, stack, prefix);
+								e.Handled = true;
+							}
+							break;
+						case PacketTypes.ChestOpen:
+							{
+								reader.ReadInt16();
+								reader.ReadInt32();
+								reader.ReadInt32();
+								string name = reader.ReadString();
+
+								if (name.Length > 0)
+								{
+									NameChest(Infos[plr].x, Infos[plr].y, plr, name);
+								}
+							}
+							break;
+						case PacketTypes.Tile:
+							{
+								byte action = reader.ReadByte();
+								int x = reader.ReadInt32();
+								int y = reader.ReadInt32();
+								int tile = reader.ReadUInt16();
+								int style = reader.ReadByte();
+
+								if (action == 1 && tile == 21)
+								{
+									if ((TShock.Utils.TilePlacementValid(x, y + 1) && Main.tile[x, y + 1].type == 138) ||
+										(TShock.Utils.TilePlacementValid(x + 1, y + 1) && Main.tile[x + 1, y + 1].type == 138))
+									{
+										TShock.Players[plr].SendTileSquare(x, y, 3);
+										e.Handled = true;
+										return;
+									}
+									if (TShock.Regions.CanBuild(x, y, TShock.Players[plr]))
+									{
+										PlaceChest(x, y, plr);
+										WorldGen.PlaceChest(x, y, 21, false, style);
+										NetMessage.SendData((int)PacketTypes.Tile, -1, plr, "", 1, x, y, 21, style);
+										e.Handled = true;
+									}
+								}
+							}
+							break;
+						case PacketTypes.TileKill:
+							{
+								byte action = reader.ReadByte();
+								int x = reader.ReadInt16();
+								int y = reader.ReadInt16();
+								int style = reader.ReadInt16();
+
+								if (action == 0)
+								{
+									if ((TShock.Utils.TilePlacementValid(x, y + 1) && Main.tile[x, y + 1].type == 138) ||
+										(TShock.Utils.TilePlacementValid(x + 1, y + 1) && Main.tile[x + 1, y + 1].type == 138))
+									{
+										TShock.Players[plr].SendTileSquare(x, y, 3);
+										e.Handled = true;
+										return;
+									}
+									if (TShock.Regions.CanBuild(x, y, TShock.Players[plr]))
+									{
+										PlaceChest(x, y, plr);
+										WorldGen.PlaceChest(x, y, 21, false, style);
+										NetMessage.SendData((int)PacketTypes.Tile, -1, plr, "", 1, x, y, 21, style);
+										e.Handled = true;
+									}
+								}
+								else if (TShock.Regions.CanBuild(x, y, TShock.Players[plr]) && Main.tile[x, y].type == 21)
+								{
+									if (Main.tile[x, y].frameY != 0)
+										y--;
+									if (Main.tile[x, y].frameX % 36 != 0)
+										x--;
+									KillChest(x, y, plr);
+									TShock.Players[plr].SendTileSquare(x, y, 3);
+									e.Handled = true;
+								}
+							}
+							break;
+					}
 				}
 			}
 		}
@@ -199,6 +235,7 @@ namespace InfiniteChests
 			sqlcreator.EnsureExists(new SqlTable("Chests",
 				new SqlColumn("X", MySqlDbType.Int32),
 				new SqlColumn("Y", MySqlDbType.Int32),
+				new SqlColumn("Name", MySqlDbType.Text),
 				new SqlColumn("Account", MySqlDbType.Text),
 				new SqlColumn("Items", MySqlDbType.Text),
 				new SqlColumn("Flags", MySqlDbType.Int32),
@@ -210,11 +247,11 @@ namespace InfiniteChests
 			Infos[e.Who] = new PlayerInfo();
 		}
 
-		void GetChest(int X, int Y, int plr)
+		void GetChest(int x, int y, int plr)
 		{
 			Chest chest = null;
-			using (QueryResult reader = Database.QueryReader("SELECT Account, Flags, Items, Password FROM Chests WHERE X = @0 AND Y = @1 and WorldID = @2",
-				X, Y, Main.worldID))
+			using (QueryResult reader = Database.QueryReader("SELECT Account, Flags, Items, Name, Password FROM Chests WHERE X = @0 AND Y = @1 and WorldID = @2",
+				x, y, Main.worldID))
 			{
 				if (reader.Read())
 				{
@@ -223,6 +260,7 @@ namespace InfiniteChests
 						account = reader.Get<string>("Account"),
 						flags = (ChestFlags)reader.Get<int>("Flags"),
 						items = reader.Get<string>("Items"),
+						name = reader.Get<string>("Name"),
 						password = reader.Get<string>("Password")
 					};
 				}
@@ -235,7 +273,7 @@ namespace InfiniteChests
 				{
 					case ChestAction.INFO:
 						player.SendInfoMessage("X: {0} Y: {1} Account: {2} {3}Refill: {4} ({5} second{6}) Region: {7}",
-							X, Y, chest.account == "" ? "N/A" : chest.account, ((chest.flags & ChestFlags.PUBLIC) != 0) ? "(public) " : "",
+							x, y, chest.account == "" ? "N/A" : chest.account, ((chest.flags & ChestFlags.PUBLIC) != 0) ? "(public) " : "",
 							(chest.flags & ChestFlags.REFILL) != 0, (int)chest.flags / 8, (int)chest.flags / 8 == 1 ? "" : "s",
 							(chest.flags & ChestFlags.REGION) != 0);
 						break;
@@ -246,7 +284,7 @@ namespace InfiniteChests
 							break;
 						}
 						Database.Query("UPDATE Chests SET Account = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
-							player.UserAccountName, X, Y, Main.worldID);
+							player.UserAccountName, x, y, Main.worldID);
 						player.SendSuccessMessage("This chest is now protected.");
 						break;
 					case ChestAction.PUBLIC:
@@ -261,7 +299,7 @@ namespace InfiniteChests
 							break;
 						}
 						Database.Query("UPDATE Chests SET Flags = ((~(Flags & 1)) & (Flags | 1)) WHERE X = @0 AND Y = @1 AND WorldID = @2",
-							X, Y, Main.worldID);
+							x, y, Main.worldID);
 						player.SendSuccessMessage("This chest is now {0}.",
 							(chest.flags & ChestFlags.PUBLIC) != 0 ? "private" : "public");
 						break;
@@ -274,14 +312,14 @@ namespace InfiniteChests
 						if (Infos[plr].time > 0)
 						{
 							Database.Query("UPDATE Chests SET Flags = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
-								((int)chest.flags & 3) + (Infos[plr].time * 8) + 4, X, Y, Main.worldID);
+								((int)chest.flags & 3) + (Infos[plr].time * 8) + 4, x, y, Main.worldID);
 							player.SendSuccessMessage(string.Format("This chest will now refill with a delay of {0} second{1}.", Infos[plr].time,
 								Infos[plr].time == 1 ? "" : "s"));
 						}
 						else
 						{
 							Database.Query("UPDATE Chests SET Flags = ((~(Flags & 4)) & (Flags | 4)) & 7 WHERE X = @0 AND Y = @1 AND WorldID = @2",
-								X, Y, Main.worldID);
+								x, y, Main.worldID);
 							player.SendSuccessMessage("This chest will {0} refill.",
 								(chest.flags & ChestFlags.REFILL) != 0 ? "no longer" : "now");
 						}
@@ -298,7 +336,7 @@ namespace InfiniteChests
 							break;
 						}
 						Database.Query("UPDATE Chests SET Flags = ((~(Flags & 2)) & (Flags | 2)) WHERE X = @0 AND Y = @1 AND WorldID = @2",
-							X, Y, Main.worldID);
+							x, y, Main.worldID);
 						player.SendSuccessMessage("This chest is {0} region shared.",
 							(chest.flags & ChestFlags.REGION) != 0 ? "no longer" : "now");
 						break;
@@ -316,12 +354,12 @@ namespace InfiniteChests
 						if (Infos[plr].password.ToLower() == "remove")
 						{
 							Database.Query("UPDATE Chests SET Password = '' WHERE X = @0 AND Y = @1 AND WorldID = @2",
-								X, Y, Main.worldID);
+								x, y, Main.worldID);
 						}
 						else
 						{
 							Database.Query("UPDATE Chests SET Password = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
-								TShock.Utils.HashPassword(Infos[plr].password), X, Y, Main.worldID);
+								TShock.Utils.HashPassword(Infos[plr].password), x, y, Main.worldID);
 						}
 						player.SendSuccessMessage("This chest is now password protected.");
 						break;
@@ -337,14 +375,14 @@ namespace InfiniteChests
 							break;
 						}
 						Database.Query("UPDATE Chests SET Account = '' WHERE X = @0 AND Y = @1 AND WorldID = @2",
-							X, Y, Main.worldID);
+							x, y, Main.worldID);
 						player.SendSuccessMessage("This chest is now un-protected.");
 						break;
 					default:
 						bool isFree = chest.account == "";
 						bool isOwner = chest.account == player.UserAccountName || player.Group.HasPermission("infchests.admin.editall");
 						bool isPub = (chest.flags & ChestFlags.PUBLIC) == ChestFlags.PUBLIC;
-						bool isRegion = (chest.flags & ChestFlags.REGION) == ChestFlags.REGION && TShock.Regions.CanBuild(X, Y, player);
+						bool isRegion = (chest.flags & ChestFlags.REGION) == ChestFlags.REGION && TShock.Regions.CanBuild(x, y, player);
 						if (!isFree && !isOwner && !isPub && !isRegion)
 						{
 							if (String.IsNullOrEmpty(chest.password))
@@ -366,7 +404,7 @@ namespace InfiniteChests
 						int timeLeft;
 						lock (Timers)
 						{
-							if (Timers.TryGetValue(new Point(X, Y), out timeLeft) && timeLeft > 0)
+							if (Timers.TryGetValue(new Point(x, y), out timeLeft) && timeLeft > 0)
 							{
 								player.SendErrorMessage("This chest will refill in {0} second{1}.", timeLeft, timeLeft == 1 ? "" : "s");
 								break;
@@ -376,9 +414,7 @@ namespace InfiniteChests
 						int[] itemArgs = new int[120];
 						string[] split = chest.items.Split(',');
 						for (int i = 0; i < 120; i++)
-						{
 							itemArgs[i] = Convert.ToInt32(split[i]);
-						}
                         
 						byte[] raw = new byte[] { 9, 0, 0, 0, 32, 0, 0, 255, 255, 255, 255, 255, 255 };
 						for (int i = 0; i < 40; i++)
@@ -393,45 +429,67 @@ namespace InfiniteChests
 						}
 
 						byte[] raw2 = new byte[] { 11, 0, 0, 0, 33, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255 };
-						Buffer.BlockCopy(BitConverter.GetBytes(X), 0, raw2, 7, 4);
-						Buffer.BlockCopy(BitConverter.GetBytes(Y), 0, raw2, 11, 4);
+						Buffer.BlockCopy(BitConverter.GetBytes(x), 0, raw2, 7, 4);
+						Buffer.BlockCopy(BitConverter.GetBytes(y), 0, raw2, 11, 4);
 						player.SendRawData(raw2);
-						Infos[plr].x = X;
-						Infos[plr].y = Y;
+
+						player.SendData(PacketTypes.ChestName, chest.name, 0, x, y);
+
+						Infos[plr].x = x;
+						Infos[plr].y = y;
 						break;
 				}
 				Infos[plr].action = ChestAction.NONE;
 			}
 		}
-		void KillChest(int X, int Y, int plr)
+		void KillChest(int x, int y, int plr)
 		{
 			Chest chest = null;
 			using (QueryResult reader = Database.QueryReader("SELECT Account, Items FROM Chests WHERE X = @0 AND Y = @1 AND WorldID = @2",
-				X, Y, Main.worldID))
+				x, y, Main.worldID))
 			{
 				if (reader.Read())
-				{
 					chest = new Chest { account = reader.Get<string>("Account"), items = reader.Get<string>("Items") };
-				}
 			}
-			TSPlayer player = TShock.Players[plr];
 
+			TSPlayer player = TShock.Players[plr];
 			if (chest != null && chest.account != player.UserAccountName && chest.account != "" && !player.Group.HasPermission("infchests.admin.editall"))
 			{
 				player.SendErrorMessage("This chest is protected.");
-				player.SendTileSquare(X, Y, 3);
+				player.SendTileSquare(x, y, 3);
 			}
 			else if (chest != null && chest.items !=
 				"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0," +
 				"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0")
 			{
-				player.SendTileSquare(X, Y, 3);
+				player.SendTileSquare(x, y, 3);
 			}
 			else
 			{
-				WorldGen.KillTile(X, Y);
-				Database.Query("DELETE FROM Chests WHERE X = @0 AND Y = @1 and WorldID = @2", X, Y, Main.worldID);
-				TSPlayer.All.SendData(PacketTypes.Tile, "", 0, X, Y + 1);
+				WorldGen.KillTile(x, y);
+				Database.Query("DELETE FROM Chests WHERE X = @0 AND Y = @1 and WorldID = @2", x, y, Main.worldID);
+				TSPlayer.All.SendData(PacketTypes.Tile, "", 0, x, y + 1);
+			}
+		}
+		void NameChest(int x, int y, int plr, string name)
+		{
+			Chest chest = null;
+			using (QueryResult reader = Database.QueryReader("SELECT Account FROM Chests WHERE X = @0 AND Y = @1 AND WorldID = @2",
+				x, y, Main.worldID))
+			{
+				if (reader.Read())
+					chest = new Chest { account = reader.Get<string>("Account") };
+			}
+
+			TSPlayer player = TShock.Players[plr];
+			if (chest != null && chest.account != player.UserAccountName && chest.account != "" && !player.Group.HasPermission("infchests.admin.editall"))
+			{
+				player.SendErrorMessage("This chest is protected.");
+				player.SendTileSquare(x, y, 3);
+			}
+			else
+			{
+				Database.Query("UPDATE Chests SET Name = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3", name, x, y, Main.worldID);
 			}
 		}
 		void ModChest(int plr, byte slot, int ID, int stack, byte prefix)
@@ -489,11 +547,11 @@ namespace InfiniteChests
 				}
 			}
 		}
-		void PlaceChest(int X, int Y, int plr)
+		void PlaceChest(int x, int y, int plr)
 		{
 			TSPlayer player = TShock.Players[plr];
-			Database.Query("INSERT INTO Chests (X, Y, Account, Flags, Items, Password, WorldID) VALUES (@0, @1, @2, @3, @4, \'\', @5)",
-				X, Y - 1, (player.IsLoggedIn && player.Group.HasPermission("infchests.chest.protect")) ? player.UserAccountName : "", 0,
+			Database.Query("INSERT INTO Chests (X, Y, Name, Account, Flags, Items, Password, WorldID) VALUES (@0, @1, @2, @3, @4, @5, \'\', @6)",
+				x, y - 1, "Chest", (player.IsLoggedIn && player.Group.HasPermission("infchests.chest.protect")) ? player.UserAccountName : "", 0,
 				"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0," +
 				"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0", Main.worldID);
 			Main.chest[0] = null;

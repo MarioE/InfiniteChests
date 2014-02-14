@@ -7,6 +7,7 @@ namespace InfiniteChests
 		public string account = "";
 		public ChestFlags flags;
 		public string items;
+		public string name;
 		public Point loc;
 		public string password = "";
 	}
