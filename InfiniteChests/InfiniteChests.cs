@@ -144,15 +144,13 @@ namespace InfiniteChests
 									{
 										PlaceChest(x, y, plr);
 										WorldGen.PlaceChest(x, y, 21, false, style);
-										Main.chest[0] = new Terraria.Chest { x = x, y = y };
-										NetMessage.SendData((int)PacketTypes.TileKill, -1, plr, "Chest", 0);
-										Main.chest[0] = null;
+										TSPlayer.All.SendData(PacketTypes.TileKill, "", 0, x, y, style);
 										e.Handled = true;
 									}
 								}
 								else if (TShock.Regions.CanBuild(x, y, TShock.Players[plr]) && Main.tile[x, y].type == 21)
 								{
-									if (Main.tile[x, y].frameY != 0)
+									if (Main.tile[x, y].frameY % 36 != 0)
 										y--;
 									if (Main.tile[x, y].frameX % 36 != 0)
 										x--;
