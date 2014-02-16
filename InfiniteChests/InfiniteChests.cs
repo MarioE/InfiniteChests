@@ -131,33 +131,6 @@ namespace InfiniteChests
 								}
 							}
 							break;
-						case PacketTypes.Tile:
-							{
-								byte action = reader.ReadByte();
-								int x = reader.ReadInt32();
-								int y = reader.ReadInt32();
-								int tile = reader.ReadUInt16();
-								int style = reader.ReadByte();
-
-								if (action == 1 && tile == 21)
-								{
-									if ((TShock.Utils.TilePlacementValid(x, y + 1) && Main.tile[x, y + 1].type == 138) ||
-										(TShock.Utils.TilePlacementValid(x + 1, y + 1) && Main.tile[x + 1, y + 1].type == 138))
-									{
-										TShock.Players[plr].SendTileSquare(x, y, 3);
-										e.Handled = true;
-										return;
-									}
-									if (TShock.Regions.CanBuild(x, y, TShock.Players[plr]))
-									{
-										PlaceChest(x, y, plr);
-										WorldGen.PlaceChest(x, y, 21, false, style);
-										NetMessage.SendData((int)PacketTypes.Tile, -1, plr, "", 1, x, y, 21, style);
-										e.Handled = true;
-									}
-								}
-							}
-							break;
 						case PacketTypes.TileKill:
 							{
 								byte action = reader.ReadByte();
@@ -167,18 +140,13 @@ namespace InfiniteChests
 
 								if (action == 0)
 								{
-									if ((TShock.Utils.TilePlacementValid(x, y + 1) && Main.tile[x, y + 1].type == 138) ||
-										(TShock.Utils.TilePlacementValid(x + 1, y + 1) && Main.tile[x + 1, y + 1].type == 138))
-									{
-										TShock.Players[plr].SendTileSquare(x, y, 3);
-										e.Handled = true;
-										return;
-									}
 									if (TShock.Regions.CanBuild(x, y, TShock.Players[plr]))
 									{
 										PlaceChest(x, y, plr);
 										WorldGen.PlaceChest(x, y, 21, false, style);
-										NetMessage.SendData((int)PacketTypes.Tile, -1, plr, "", 1, x, y, 21, style);
+										Main.chest[0] = new Terraria.Chest { x = x, y = y };
+										NetMessage.SendData((int)PacketTypes.TileKill, -1, plr, "Chest", 0);
+										Main.chest[0] = null;
 										e.Handled = true;
 									}
 								}
@@ -433,7 +401,7 @@ namespace InfiniteChests
 						Buffer.BlockCopy(BitConverter.GetBytes(y), 0, raw2, 11, 4);
 						player.SendRawData(raw2);
 
-						player.SendData(PacketTypes.ChestName, chest.name, 0, x, y);
+						player.SendData(PacketTypes.ChestName, chest.name ?? "Chest", 0, x, y);
 
 						Infos[plr].x = x;
 						Infos[plr].y = y;
@@ -488,9 +456,7 @@ namespace InfiniteChests
 				player.SendTileSquare(x, y, 3);
 			}
 			else
-			{
 				Database.Query("UPDATE Chests SET Name = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3", name, x, y, Main.worldID);
-			}
 		}
 		void ModChest(int plr, byte slot, int ID, int stack, byte prefix)
 		{
