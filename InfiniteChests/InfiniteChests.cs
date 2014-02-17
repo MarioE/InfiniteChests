@@ -5,6 +5,7 @@ using System.IO;
 using System.Reflection;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Timers;
 using Mono.Data.Sqlite;
 using MySql.Data.MySqlClient;
@@ -56,6 +57,7 @@ namespace InfiniteChests
 			{
 				ServerApi.Hooks.NetGetData.Deregister(this, OnGetData);
 				ServerApi.Hooks.GameInitialize.Deregister(this, OnInitialize);
+				ServerApi.Hooks.GamePostInitialize.Deregister(this, OnPostInitialize);
 				ServerApi.Hooks.ServerLeave.Deregister(this, OnLeave);
 
 				Database.Dispose();
@@ -66,6 +68,7 @@ namespace InfiniteChests
 		{
 			ServerApi.Hooks.NetGetData.Register(this, OnGetData);
 			ServerApi.Hooks.GameInitialize.Register(this, OnInitialize);
+			ServerApi.Hooks.GamePostInitialize.Register(this, OnPostInitialize);
 			ServerApi.Hooks.ServerLeave.Register(this, OnLeave);
 
 			Timer.Elapsed += OnElapsed;
@@ -100,7 +103,7 @@ namespace InfiniteChests
 							{
 								int x = reader.ReadInt32();
 								int y = reader.ReadInt32();
-								GetChest(x, y, plr);
+								Task.Factory.StartNew(() => GetChest(x, y, plr));
 								e.Handled = true;
 							}
 							break;
@@ -114,7 +117,7 @@ namespace InfiniteChests
 								int stack = reader.ReadInt16();
 								byte prefix = reader.ReadByte();
 								int netID = reader.ReadInt16();
-								ModChest(plr, slot, netID, stack, prefix);
+								Task.Factory.StartNew(() => ModChest(plr, slot, netID, stack, prefix));
 								e.Handled = true;
 							}
 							break;
@@ -126,9 +129,7 @@ namespace InfiniteChests
 								string name = reader.ReadString();
 
 								if (name.Length > 0)
-								{
-									NameChest(Infos[plr].x, Infos[plr].y, plr, name);
-								}
+									Task.Factory.StartNew(() => NameChest(Infos[plr].x, Infos[plr].y, plr, name));
 							}
 							break;
 						case PacketTypes.TileKill:
@@ -142,7 +143,7 @@ namespace InfiniteChests
 								{
 									if (TShock.Regions.CanBuild(x, y, TShock.Players[plr]))
 									{
-										PlaceChest(x, y, plr);
+										Task.Factory.StartNew(() => PlaceChest(x, y, plr));
 										WorldGen.PlaceChest(x, y, 21, false, style);
 										TSPlayer.All.SendData(PacketTypes.TileKill, "", 0, x, y, style);
 										e.Handled = true;
@@ -154,7 +155,7 @@ namespace InfiniteChests
 										y--;
 									if (Main.tile[x, y].frameX % 36 != 0)
 										x--;
-									KillChest(x, y, plr);
+									Task.Factory.StartNew(() => KillChest(x, y, plr));
 									TShock.Players[plr].SendTileSquare(x, y, 3);
 									e.Handled = true;
 								}
@@ -170,6 +171,7 @@ namespace InfiniteChests
 			Commands.ChatCommands.Add(new Command("infchests.admin.info", Info, "cinfo"));
 			Commands.ChatCommands.Add(new Command("infchests.chest.lock", Lock, "clock") { DoLog = false });
 			Commands.ChatCommands.Add(new Command("infchests.admin.convert", ConvertChests, "convchests"));
+			Commands.ChatCommands.Add(new Command("infchests.admin.prune", Prune, "prunechests"));
 			Commands.ChatCommands.Add(new Command("infchests.chest.public", PublicProtect, "cpset"));
 			Commands.ChatCommands.Add(new Command("infchests.admin.refill", Refill, "crefill"));
 			Commands.ChatCommands.Add(new Command("infchests.chest.region", RegionProtect, "crset"));
@@ -211,6 +213,31 @@ namespace InfiniteChests
 		void OnLeave(LeaveEventArgs e)
 		{
 			Infos[e.Who] = new PlayerInfo();
+		}
+		void OnPostInitialize(EventArgs e)
+		{
+			int converted = 0;
+			StringBuilder items = new StringBuilder();
+			for (int i = 0; i < 1000; i++)
+			{
+				Terraria.Chest c = Main.chest[i];
+				if (c != null)
+				{
+					for (int j = 0; j < 40; j++)
+						items.Append("," + c.item[j].netID + "," + c.item[j].stack + "," + c.item[j].prefix);
+					Database.Query("INSERT INTO Chests (X, Y, Account, Items, WorldID) VALUES (@0, @1, '', @2, @3)",
+						c.x, c.y, items.ToString().Substring(1), Main.worldID);
+					converted++;
+					items.Clear();
+					Main.chest[i] = null;
+				}
+			}
+
+			if (converted > 0)
+			{
+				TSPlayer.Server.SendSuccessMessage("[InfiniteChests] Converted {0} chest{1}.", converted, converted == 1 ? "" : "s");
+				WorldFile.saveWorld();
+			}
 		}
 
 		void GetChest(int x, int y, int plr)
@@ -490,15 +517,9 @@ namespace InfiniteChests
 					itemArgs[slot * 3 + 2] = prefix;
 					StringBuilder newItems = new StringBuilder();
 					for (int i = 0; i < 120; i++)
-					{
-						newItems.Append(itemArgs[i]);
-						if (i != 119)
-						{
-							newItems.Append(',');
-						}
-					}
+						newItems.Append("," + itemArgs[i]);
 					Database.Query("UPDATE Chests SET Items = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
-						newItems.ToString(), Infos[plr].x, Infos[plr].y, Main.worldID);
+						newItems.ToString().Substring(1), Infos[plr].x, Infos[plr].y, Main.worldID);
 
 					for (int i = 0; i < 256; i++)
 					{
@@ -523,30 +544,29 @@ namespace InfiniteChests
 
 		void ConvertChests(CommandArgs e)
 		{
-			if (e.Parameters.Count > 0 && e.Parameters[0] == "true") Database.Query("DELETE FROM Chests WHERE WorldID = @0", Main.worldID);
-			int converted = 0;
-			StringBuilder items = new StringBuilder();
-			for (int i = 0; i < 1000; i++)
-			{
-				Terraria.Chest c = Main.chest[i];
-				if (c != null)
+			Task.Factory.StartNew(() => 
 				{
-					for (int j = 0; j < 40; j++)
+					int converted = 0;
+					StringBuilder items = new StringBuilder();
+					for (int i = 0; i < 1000; i++)
 					{
-						items.Append(c.item[j].netID + "," + c.item[j].stack + "," + c.item[j].prefix);
-						if (j != 39)
+						Terraria.Chest c = Main.chest[i];
+						if (c != null)
 						{
-							items.Append(",");
+							for (int j = 0; j < 40; j++)
+								items.Append("," + c.item[j].netID + "," + c.item[j].stack + "," + c.item[j].prefix);
+							Database.Query("INSERT INTO Chests (X, Y, Account, Items, WorldID) VALUES (@0, @1, '', @2, @3)",
+								c.x, c.y, items.ToString().Substring(1), Main.worldID);
+							converted++;
+							items.Clear();
+							Main.chest[i] = null;
 						}
 					}
-					Database.Query("INSERT INTO Chests (X, Y, Account, Items, WorldID) VALUES (@0, @1, '', @2, @3)",
-						c.x, c.y, items.ToString(), Main.worldID);
-					converted++;
-					items.Clear();
-					Main.chest[i] = null;
-				}
-			}
-			e.Player.SendSuccessMessage("Converted {0} chest{1}.", converted, converted == 1 ? "" : "s");
+
+					e.Player.SendSuccessMessage("[InfiniteChests] Converted {0} chest{1}.", converted, converted == 1 ? "" : "s");
+					if (converted > 0)
+						WorldFile.saveWorld();
+				});
 		}
 		void Deselect(CommandArgs e)
 		{
@@ -581,6 +601,33 @@ namespace InfiniteChests
 		{
 			Infos[e.Player.Index].action = ChestAction.PROTECT;
 			e.Player.SendInfoMessage("Open a chest to protect it.");
+		}
+		void Prune(CommandArgs e)
+		{
+			Task.Factory.StartNew(() =>
+				{
+					using (var reader = Database.QueryReader("SELECT X, Y FROM Chests WHERE Items = @0 AND WorldID = @1",
+						"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0," +
+						"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",
+						Main.worldID))
+					{
+						while (reader.Read())
+						{
+							int x = reader.Get<int>("X");
+							int y = reader.Get<int>("Y");
+							WorldGen.KillTile(x, y);
+							TSPlayer.All.SendTileSquare(x, y, 3);
+						}
+					}
+
+					int count = Database.Query("DELETE FROM Chests WHERE Items = @0 AND WorldID = @1",
+						"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0," +
+						"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",
+						Main.worldID);
+					e.Player.SendSuccessMessage("Pruned {0} chest{1}.", count, count == 1 ? "" : "s");
+					if (count > 0)
+						WorldFile.saveWorld();
+				});
 		}
 		void Refill(CommandArgs e)
 		{
