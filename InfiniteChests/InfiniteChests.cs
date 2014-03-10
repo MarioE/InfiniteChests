@@ -485,48 +485,51 @@ namespace InfiniteChests
 		}
 		void ModChest(int plr, byte slot, int ID, int stack, byte prefix)
 		{
-			Chest chest = null;
-            using (QueryResult reader = Database.QueryReader("SELECT Account, Flags, Items FROM Chests WHERE X = @0 AND Y = @1 AND WorldID = @2",
-				Infos[plr].x, Infos[plr].y, Main.worldID))
+			lock (Database)
 			{
-				if (reader.Read())
-                    chest = new Chest { flags = (ChestFlags)reader.Get<int>("Flags"), items = reader.Get<string>("Items"), account = reader.Get<string>("Account") };
-			}
-			TSPlayer player = TShock.Players[plr];
-
-			if (chest != null)
-			{
-				if ((chest.flags & ChestFlags.REFILL) != 0)
+				Chest chest = null;
+				using (QueryResult reader = Database.QueryReader("SELECT Account, Flags, Items FROM Chests WHERE X = @0 AND Y = @1 AND WorldID = @2",
+					Infos[plr].x, Infos[plr].y, Main.worldID))
 				{
-					lock (Timers)
-					{
-						if (!Timers.ContainsKey(new Point(Infos[plr].x, Infos[plr].y)))
-							Timers.Add(new Point(Infos[plr].x, Infos[plr].y), (int)chest.flags >> 3);
-					}
+					if (reader.Read())
+						chest = new Chest { flags = (ChestFlags)reader.Get<int>("Flags"), items = reader.Get<string>("Items"), account = reader.Get<string>("Account") };
 				}
-				else
-				{
-					int[] itemArgs = new int[120];
-					string[] split = chest.items.Split(',');
-					for (int i = 0; i < 120; i++)
-					{
-						itemArgs[i] = Convert.ToInt32(split[i]);
-					}
-					itemArgs[slot * 3] = ID;
-					itemArgs[slot * 3 + 1] = stack;
-					itemArgs[slot * 3 + 2] = prefix;
-					StringBuilder newItems = new StringBuilder();
-					for (int i = 0; i < 120; i++)
-						newItems.Append("," + itemArgs[i]);
-					Database.Query("UPDATE Chests SET Items = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
-						newItems.ToString().Substring(1), Infos[plr].x, Infos[plr].y, Main.worldID);
+				TSPlayer player = TShock.Players[plr];
 
-					for (int i = 0; i < 256; i++)
+				if (chest != null)
+				{
+					if ((chest.flags & ChestFlags.REFILL) != 0)
 					{
-						if (Infos[i].x == Infos[plr].x && Infos[i].y == Infos[plr].y && i != plr)
+						lock (Timers)
 						{
-							byte[] raw = new byte[] { 9, 0, 0, 0, 32, 0, 0, slot, (byte)stack, (byte)(stack >> 8), prefix, (byte)ID, (byte)(ID >> 8) };
-							TShock.Players[i].SendRawData(raw);
+							if (!Timers.ContainsKey(new Point(Infos[plr].x, Infos[plr].y)))
+								Timers.Add(new Point(Infos[plr].x, Infos[plr].y), (int)chest.flags >> 3);
+						}
+					}
+					else
+					{
+						int[] itemArgs = new int[120];
+						string[] split = chest.items.Split(',');
+						for (int i = 0; i < 120; i++)
+						{
+							itemArgs[i] = Convert.ToInt32(split[i]);
+						}
+						itemArgs[slot * 3] = ID;
+						itemArgs[slot * 3 + 1] = stack;
+						itemArgs[slot * 3 + 2] = prefix;
+						StringBuilder newItems = new StringBuilder();
+						for (int i = 0; i < 120; i++)
+							newItems.Append("," + itemArgs[i]);
+						Database.Query("UPDATE Chests SET Items = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
+							newItems.ToString().Substring(1), Infos[plr].x, Infos[plr].y, Main.worldID);
+
+						for (int i = 0; i < 256; i++)
+						{
+							if (Infos[i].x == Infos[plr].x && Infos[i].y == Infos[plr].y && i != plr)
+							{
+								byte[] raw = new byte[] { 9, 0, 0, 0, 32, 0, 0, slot, (byte)stack, (byte)(stack >> 8), prefix, (byte)ID, (byte)(ID >> 8) };
+								TShock.Players[i].SendRawData(raw);
+							}
 						}
 					}
 				}
