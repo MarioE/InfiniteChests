@@ -145,7 +145,8 @@ namespace InfiniteChests
 									{
 										Task.Factory.StartNew(() => PlaceChest(x, y, plr));
 										WorldGen.PlaceChest(x, y, 21, false, style);
-										TSPlayer.All.SendData(PacketTypes.TileKill, "", 0, x, y, style);
+										NetMessage.SendData((int)PacketTypes.Tile, -1, plr, "", 1, x, y, 21, style);
+										NetMessage.SendData((int)PacketTypes.TileKill, plr, -1, "", 0, x, y, style);
 										e.Handled = true;
 									}
 								}
@@ -156,7 +157,6 @@ namespace InfiniteChests
 									if (Main.tile[x, y].frameX % 36 != 0)
 										x--;
 									Task.Factory.StartNew(() => KillChest(x, y, plr));
-									TShock.Players[plr].SendTileSquare(x, y, 3);
 									e.Handled = true;
 								}
 							}
