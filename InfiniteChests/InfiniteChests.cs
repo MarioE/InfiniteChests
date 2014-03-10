@@ -145,8 +145,8 @@ namespace InfiniteChests
 									{
 										Task.Factory.StartNew(() => PlaceChest(x, y, plr));
 										WorldGen.PlaceChest(x, y, 21, false, style);
-										NetMessage.SendData((int)PacketTypes.Tile, -1, plr, "", 1, x, y, 21, style);
-										NetMessage.SendData((int)PacketTypes.TileKill, plr, -1, "", 0, x, y, style);
+										NetMessage.SendData((int)PacketTypes.TileKill, -1, plr, "", 0, x, y, style, 1);
+										NetMessage.SendData((int)PacketTypes.TileKill, plr, -1, "", 0, x, y, style, 0);
 										e.Handled = true;
 									}
 								}
@@ -539,7 +539,7 @@ namespace InfiniteChests
 				x, y - 1, "Chest", (player.IsLoggedIn && player.Group.HasPermission("infchests.chest.protect")) ? player.UserAccountName : "", 0,
 				"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0," +
 				"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0", Main.worldID);
-			Main.chest[0] = null;
+			Main.chest[999] = null;
 		}
 
 		void ConvertChests(CommandArgs e)
