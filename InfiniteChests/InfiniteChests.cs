@@ -412,10 +412,7 @@ namespace InfiniteChests
                         
 						
 						byte[] raw = new byte[] { 11, 0, 32, 0, 0, 255, 255, 255, 255, 255, 255 };
-						byte[] length = BitConverter.GetBytes((short)raw.Length);
-						raw[0] = length[0];
-						raw[1] = length[1];
-						Console.WriteLine(raw[0] + "," + raw[1]);
+
 						for (int i = 0; i < 40; i++)
 						{
 							raw[5] = (byte)i;
