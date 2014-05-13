@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Timers;
+using System.IO.Streams;
 using Mono.Data.Sqlite;
 using MySql.Data.MySqlClient;
 using Terraria;
@@ -16,7 +17,7 @@ using TShockAPI.DB;
 
 namespace InfiniteChests
 {
-	[ApiVersion(1, 15)]
+	[ApiVersion(1, 16)]
 	public class InfiniteChests : TerrariaPlugin
 	{
 		IDbConnection Database;
@@ -95,14 +96,14 @@ namespace InfiniteChests
 			if (!e.Handled)
 			{
 				int plr = e.Msg.whoAmI;
-				using (var reader = new BinaryReader(new MemoryStream(e.Msg.readBuffer, e.Index, e.Length)))
+				using (var reader = new MemoryStream(e.Msg.readBuffer, e.Index, e.Length))
 				{
 					switch (e.MsgID)
 					{
 						case PacketTypes.ChestGetContents:
 							{
-								int x = reader.ReadInt32();
-								int y = reader.ReadInt32();
+								int x = reader.ReadInt16();
+								int y = reader.ReadInt16();
 								Task.Factory.StartNew(() => GetChest(x, y, plr));
 								e.Handled = true;
 							}
@@ -110,12 +111,12 @@ namespace InfiniteChests
 						case PacketTypes.ChestItem:
 							{
 								reader.ReadInt16();
-								byte slot = reader.ReadByte();
+								byte slot = (byte)reader.ReadByte();
 								if (slot > 40)
 									return;
 
 								int stack = reader.ReadInt16();
-								byte prefix = reader.ReadByte();
+								byte prefix = (byte)reader.ReadByte();
 								int netID = reader.ReadInt16();
 								Task.Factory.StartNew(() => ModChest(plr, slot, netID, stack, prefix));
 								e.Handled = true;
@@ -124,8 +125,8 @@ namespace InfiniteChests
 						case PacketTypes.ChestOpen:
 							{
 								reader.ReadInt16();
-								reader.ReadInt32();
-								reader.ReadInt32();
+								reader.ReadInt16();
+								reader.ReadInt16();
 								string name = reader.ReadString();
 
 								if (name.Length > 0)
@@ -134,7 +135,7 @@ namespace InfiniteChests
 							break;
 						case PacketTypes.TileKill:
 							{
-								byte action = reader.ReadByte();
+								byte action = (byte)reader.ReadByte();
 								int x = reader.ReadInt16();
 								int y = reader.ReadInt16();
 								int style = reader.ReadInt16();
@@ -409,21 +410,26 @@ namespace InfiniteChests
 						for (int i = 0; i < 120; i++)
 							itemArgs[i] = Convert.ToInt32(split[i]);
                         
-						byte[] raw = new byte[] { 9, 0, 0, 0, 32, 0, 0, 255, 255, 255, 255, 255, 255 };
+						
+						byte[] raw = new byte[] { 11, 0, 32, 0, 0, 255, 255, 255, 255, 255, 255 };
+						byte[] length = BitConverter.GetBytes((short)raw.Length);
+						raw[0] = length[0];
+						raw[1] = length[1];
+						Console.WriteLine(raw[0] + "," + raw[1]);
 						for (int i = 0; i < 40; i++)
 						{
-							raw[7] = (byte)i;
-							raw[8] = (byte)itemArgs[i * 3 + 1];
-							raw[9] = (byte)(itemArgs[i * 3 + 1] >> 8);
-							raw[10] = (byte)itemArgs[i * 3 + 2];
-							raw[11] = (byte)itemArgs[i * 3];
-							raw[12] = (byte)(itemArgs[i * 3] >> 8);
+							raw[5] = (byte)i;
+							raw[6] = (byte)itemArgs[i * 3 + 1];
+							raw[7] = (byte)(itemArgs[i * 3 + 1] >> 8);
+							raw[8] = (byte)itemArgs[i * 3 + 2];
+							raw[9] = (byte)itemArgs[i * 3];
+							raw[10] = (byte)(itemArgs[i * 3] >> 8);
 							player.SendRawData(raw);
 						}
 
-						byte[] raw2 = new byte[] { 11, 0, 0, 0, 33, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255 };
-						Buffer.BlockCopy(BitConverter.GetBytes(x), 0, raw2, 7, 4);
-						Buffer.BlockCopy(BitConverter.GetBytes(y), 0, raw2, 11, 4);
+						byte[] raw2 = new byte[] { 9, 0, 33, 0, 0, 255, 255, 255, 255 };
+						Buffer.BlockCopy(BitConverter.GetBytes((short)x), 0, raw2, 5, 2);
+						Buffer.BlockCopy(BitConverter.GetBytes((short)y), 0, raw2, 7, 2);
 						player.SendRawData(raw2);
 
 						player.SendData(PacketTypes.ChestName, chest.name ?? "Chest", 0, x, y);
