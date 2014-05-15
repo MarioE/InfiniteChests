@@ -243,199 +243,206 @@ namespace InfiniteChests
 
 		void GetChest(int x, int y, int plr)
 		{
-			Chest chest = null;
-			using (QueryResult reader = Database.QueryReader("SELECT Account, Flags, Items, Name, Password FROM Chests WHERE X = @0 AND Y = @1 and WorldID = @2",
-				x, y, Main.worldID))
+			try
 			{
-				if (reader.Read())
+				Chest chest = null;
+				using (QueryResult reader = Database.QueryReader("SELECT Account, Flags, Items, Name, Password FROM Chests WHERE X = @0 AND Y = @1 and WorldID = @2",
+					x, y, Main.worldID))
 				{
-					chest = new Chest
+					if (reader.Read())
 					{
-						account = reader.Get<string>("Account"),
-						flags = (ChestFlags)reader.Get<int>("Flags"),
-						items = reader.Get<string>("Items"),
-						name = reader.Get<string>("Name"),
-						password = reader.Get<string>("Password")
-					};
+						chest = new Chest
+						{
+							account = reader.Get<string>("Account"),
+							flags = (ChestFlags)reader.Get<int>("Flags"),
+							items = reader.Get<string>("Items"),
+							name = reader.Get<string>("Name"),
+							password = reader.Get<string>("Password")
+						};
+					}
 				}
-			}
-			TSPlayer player = TShock.Players[plr];
+				TSPlayer player = TShock.Players[plr];
 
-			if (chest != null)
-			{
-				switch (Infos[plr].action)
+				if (chest != null)
 				{
-					case ChestAction.INFO:
-						player.SendInfoMessage("X: {0} Y: {1} Account: {2} {3}Refill: {4} ({5} second{6}) Region: {7}",
-							x, y, chest.account == "" ? "N/A" : chest.account, ((chest.flags & ChestFlags.PUBLIC) != 0) ? "(public) " : "",
-							(chest.flags & ChestFlags.REFILL) != 0, (int)chest.flags / 8, (int)chest.flags / 8 == 1 ? "" : "s",
-							(chest.flags & ChestFlags.REGION) != 0);
-						break;
-					case ChestAction.PROTECT:
-						if (chest.account != "")
-						{
-							player.SendErrorMessage("This chest is already protected.");
+					switch (Infos[plr].action)
+					{
+						case ChestAction.INFO:
+							player.SendInfoMessage("X: {0} Y: {1} Account: {2} {3}Refill: {4} ({5} second{6}) Region: {7}",
+								x, y, chest.account == "" ? "N/A" : chest.account, ((chest.flags & ChestFlags.PUBLIC) != 0) ? "(public) " : "",
+								(chest.flags & ChestFlags.REFILL) != 0, (int)chest.flags / 8, (int)chest.flags / 8 == 1 ? "" : "s",
+								(chest.flags & ChestFlags.REGION) != 0);
 							break;
-						}
-						Database.Query("UPDATE Chests SET Account = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
-							player.UserAccountName, x, y, Main.worldID);
-						player.SendSuccessMessage("This chest is now protected.");
-						break;
-					case ChestAction.PUBLIC:
-						if (chest.account == "")
-						{
-							player.SendErrorMessage("This chest is not protected.");
-							break;
-						}
-						if (chest.account != player.UserAccountName && !player.Group.HasPermission("infchests.admin.editall"))
-						{
-							player.SendErrorMessage("This chest is not yours.");
-							break;
-						}
-						Database.Query("UPDATE Chests SET Flags = ((~(Flags & 1)) & (Flags | 1)) WHERE X = @0 AND Y = @1 AND WorldID = @2",
-							x, y, Main.worldID);
-						player.SendSuccessMessage("This chest is now {0}.",
-							(chest.flags & ChestFlags.PUBLIC) != 0 ? "private" : "public");
-						break;
-					case ChestAction.REFILL:
-						if (chest.account != player.UserAccountName && chest.account != "" && !player.Group.HasPermission("infchests.admin.editall"))
-						{
-							player.SendErrorMessage("This chest is not yours.");
-							break;
-						}
-						if (Infos[plr].time > 0)
-						{
-							Database.Query("UPDATE Chests SET Flags = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
-								((int)chest.flags & 3) + (Infos[plr].time * 8) + 4, x, y, Main.worldID);
-							player.SendSuccessMessage(string.Format("This chest will now refill with a delay of {0} second{1}.", Infos[plr].time,
-								Infos[plr].time == 1 ? "" : "s"));
-						}
-						else
-						{
-							Database.Query("UPDATE Chests SET Flags = ((~(Flags & 4)) & (Flags | 4)) & 7 WHERE X = @0 AND Y = @1 AND WorldID = @2",
-								x, y, Main.worldID);
-							player.SendSuccessMessage("This chest will {0} refill.",
-								(chest.flags & ChestFlags.REFILL) != 0 ? "no longer" : "now");
-						}
-						break;
-					case ChestAction.REGION:
-						if (chest.account == "")
-						{
-							player.SendErrorMessage("This chest is not protected.");
-							break;
-						}
-						if (chest.account != player.UserAccountName && !player.Group.HasPermission("infchests.admin.editall"))
-						{
-							player.SendErrorMessage("This chest is not yours.");
-							break;
-						}
-						Database.Query("UPDATE Chests SET Flags = ((~(Flags & 2)) & (Flags | 2)) WHERE X = @0 AND Y = @1 AND WorldID = @2",
-							x, y, Main.worldID);
-						player.SendSuccessMessage("This chest is {0} region shared.",
-							(chest.flags & ChestFlags.REGION) != 0 ? "no longer" : "now");
-						break;
-					case ChestAction.SETPASS:
-						if (chest.account == "")
-						{
-							player.SendErrorMessage("This chest is not protected.");
-							break;
-						}
-						if (chest.account != player.UserAccountName && !player.Group.HasPermission("infchests.admin.editall"))
-						{
-							player.SendErrorMessage("This chest is not yours.");
-							break;
-						}
-						if (Infos[plr].password.ToLower() == "remove")
-						{
-							Database.Query("UPDATE Chests SET Password = '' WHERE X = @0 AND Y = @1 AND WorldID = @2",
-								x, y, Main.worldID);
-						}
-						else
-						{
-							Database.Query("UPDATE Chests SET Password = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
-								TShock.Utils.HashPassword(Infos[plr].password), x, y, Main.worldID);
-						}
-						player.SendSuccessMessage("This chest is now password protected.");
-						break;
-					case ChestAction.UNPROTECT:
-						if (chest.account == "")
-						{
-							player.SendErrorMessage("This chest is not protected.");
-							break;
-						}
-						if (chest.account != player.UserAccountName && !player.Group.HasPermission("infchests.admin.editall"))
-						{
-							player.SendErrorMessage("This chest is not yours.");
-							break;
-						}
-						Database.Query("UPDATE Chests SET Account = '' WHERE X = @0 AND Y = @1 AND WorldID = @2",
-							x, y, Main.worldID);
-						player.SendSuccessMessage("This chest is now un-protected.");
-						break;
-					default:
-						bool isFree = chest.account == "";
-						bool isOwner = chest.account == player.UserAccountName || player.Group.HasPermission("infchests.admin.editall");
-						bool isPub = (chest.flags & ChestFlags.PUBLIC) == ChestFlags.PUBLIC;
-						bool isRegion = (chest.flags & ChestFlags.REGION) == ChestFlags.REGION && TShock.Regions.CanBuild(x, y, player);
-						if (!isFree && !isOwner && !isPub && !isRegion)
-						{
-							if (String.IsNullOrEmpty(chest.password))
+						case ChestAction.PROTECT:
+							if (chest.account != "")
 							{
-								player.SendErrorMessage("This chest is protected.");
+								player.SendErrorMessage("This chest is already protected.");
 								break;
 							}
-							else if (TShock.Utils.HashPassword(Infos[plr].password) != chest.password)
+							Database.Query("UPDATE Chests SET Account = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
+								player.UserAccountName, x, y, Main.worldID);
+							player.SendSuccessMessage("This chest is now protected.");
+							break;
+						case ChestAction.PUBLIC:
+							if (chest.account == "")
 							{
-								player.SendErrorMessage("This chest is password protected.");
+								player.SendErrorMessage("This chest is not protected.");
 								break;
+							}
+							if (chest.account != player.UserAccountName && !player.Group.HasPermission("infchests.admin.editall"))
+							{
+								player.SendErrorMessage("This chest is not yours.");
+								break;
+							}
+							Database.Query("UPDATE Chests SET Flags = ((~(Flags & 1)) & (Flags | 1)) WHERE X = @0 AND Y = @1 AND WorldID = @2",
+								x, y, Main.worldID);
+							player.SendSuccessMessage("This chest is now {0}.",
+								(chest.flags & ChestFlags.PUBLIC) != 0 ? "private" : "public");
+							break;
+						case ChestAction.REFILL:
+							if (chest.account != player.UserAccountName && chest.account != "" && !player.Group.HasPermission("infchests.admin.editall"))
+							{
+								player.SendErrorMessage("This chest is not yours.");
+								break;
+							}
+							if (Infos[plr].time > 0)
+							{
+								Database.Query("UPDATE Chests SET Flags = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
+									((int)chest.flags & 3) + (Infos[plr].time * 8) + 4, x, y, Main.worldID);
+								player.SendSuccessMessage(string.Format("This chest will now refill with a delay of {0} second{1}.", Infos[plr].time,
+									Infos[plr].time == 1 ? "" : "s"));
 							}
 							else
 							{
-								player.SendSuccessMessage("Chest unlocked.");
-								Infos[plr].password = "";
+								Database.Query("UPDATE Chests SET Flags = ((~(Flags & 4)) & (Flags | 4)) & 7 WHERE X = @0 AND Y = @1 AND WorldID = @2",
+									x, y, Main.worldID);
+								player.SendSuccessMessage("This chest will {0} refill.",
+									(chest.flags & ChestFlags.REFILL) != 0 ? "no longer" : "now");
 							}
-						}
-						int timeLeft;
-						lock (Timers)
-						{
-							if (Timers.TryGetValue(new Point(x, y), out timeLeft) && timeLeft > 0)
+							break;
+						case ChestAction.REGION:
+							if (chest.account == "")
 							{
-								player.SendErrorMessage("This chest will refill in {0} second{1}.", timeLeft, timeLeft == 1 ? "" : "s");
+								player.SendErrorMessage("This chest is not protected.");
 								break;
 							}
-						}
+							if (chest.account != player.UserAccountName && !player.Group.HasPermission("infchests.admin.editall"))
+							{
+								player.SendErrorMessage("This chest is not yours.");
+								break;
+							}
+							Database.Query("UPDATE Chests SET Flags = ((~(Flags & 2)) & (Flags | 2)) WHERE X = @0 AND Y = @1 AND WorldID = @2",
+								x, y, Main.worldID);
+							player.SendSuccessMessage("This chest is {0} region shared.",
+								(chest.flags & ChestFlags.REGION) != 0 ? "no longer" : "now");
+							break;
+						case ChestAction.SETPASS:
+							if (chest.account == "")
+							{
+								player.SendErrorMessage("This chest is not protected.");
+								break;
+							}
+							if (chest.account != player.UserAccountName && !player.Group.HasPermission("infchests.admin.editall"))
+							{
+								player.SendErrorMessage("This chest is not yours.");
+								break;
+							}
+							if (Infos[plr].password.ToLower() == "remove")
+							{
+								Database.Query("UPDATE Chests SET Password = '' WHERE X = @0 AND Y = @1 AND WorldID = @2",
+									x, y, Main.worldID);
+							}
+							else
+							{
+								Database.Query("UPDATE Chests SET Password = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
+									TShock.Utils.HashPassword(Infos[plr].password), x, y, Main.worldID);
+							}
+							player.SendSuccessMessage("This chest is now password protected.");
+							break;
+						case ChestAction.UNPROTECT:
+							if (chest.account == "")
+							{
+								player.SendErrorMessage("This chest is not protected.");
+								break;
+							}
+							if (chest.account != player.UserAccountName && !player.Group.HasPermission("infchests.admin.editall"))
+							{
+								player.SendErrorMessage("This chest is not yours.");
+								break;
+							}
+							Database.Query("UPDATE Chests SET Account = '' WHERE X = @0 AND Y = @1 AND WorldID = @2",
+								x, y, Main.worldID);
+							player.SendSuccessMessage("This chest is now un-protected.");
+							break;
+						default:
+							bool isFree = chest.account == "";
+							bool isOwner = chest.account == player.UserAccountName || player.Group.HasPermission("infchests.admin.editall");
+							bool isPub = (chest.flags & ChestFlags.PUBLIC) == ChestFlags.PUBLIC;
+							bool isRegion = (chest.flags & ChestFlags.REGION) == ChestFlags.REGION && TShock.Regions.CanBuild(x, y, player);
+							if (!isFree && !isOwner && !isPub && !isRegion)
+							{
+								if (String.IsNullOrEmpty(chest.password))
+								{
+									player.SendErrorMessage("This chest is protected.");
+									break;
+								}
+								else if (TShock.Utils.HashPassword(Infos[plr].password) != chest.password)
+								{
+									player.SendErrorMessage("This chest is password protected.");
+									break;
+								}
+								else
+								{
+									player.SendSuccessMessage("Chest unlocked.");
+									Infos[plr].password = "";
+								}
+							}
+							int timeLeft;
+							lock (Timers)
+							{
+								if (Timers.TryGetValue(new Point(x, y), out timeLeft) && timeLeft > 0)
+								{
+									player.SendErrorMessage("This chest will refill in {0} second{1}.", timeLeft, timeLeft == 1 ? "" : "s");
+									break;
+								}
+							}
 
-						int[] itemArgs = new int[120];
-						string[] split = chest.items.Split(',');
-						for (int i = 0; i < 120; i++)
-							itemArgs[i] = Convert.ToInt32(split[i]);
-                        
-						
-						byte[] raw = new byte[] { 11, 0, 32, 0, 0, 255, 255, 255, 255, 255, 255 };
+							int[] itemArgs = new int[120];
+							string[] split = chest.items.Split(',');
+							for (int i = 0; i < 120; i++)
+								itemArgs[i] = Convert.ToInt32(split[i]);
 
-						for (int i = 0; i < 40; i++)
-						{
-							raw[5] = (byte)i;
-							raw[6] = (byte)itemArgs[i * 3 + 1];
-							raw[7] = (byte)(itemArgs[i * 3 + 1] >> 8);
-							raw[8] = (byte)itemArgs[i * 3 + 2];
-							raw[9] = (byte)itemArgs[i * 3];
-							raw[10] = (byte)(itemArgs[i * 3] >> 8);
-							player.SendRawData(raw);
-						}
 
-						byte[] raw2 = new byte[] { 9, 0, 33, 0, 0, 255, 255, 255, 255 };
-						Buffer.BlockCopy(BitConverter.GetBytes((short)x), 0, raw2, 5, 2);
-						Buffer.BlockCopy(BitConverter.GetBytes((short)y), 0, raw2, 7, 2);
-						player.SendRawData(raw2);
+							byte[] raw = new byte[] { 11, 0, 32, 0, 0, 255, 255, 255, 255, 255, 255 };
 
-						player.SendData(PacketTypes.ChestName, chest.name ?? "Chest", 0, x, y);
+							for (int i = 0; i < 40; i++)
+							{
+								raw[5] = (byte)i;
+								raw[6] = (byte)itemArgs[i * 3 + 1];
+								raw[7] = (byte)(itemArgs[i * 3 + 1] >> 8);
+								raw[8] = (byte)itemArgs[i * 3 + 2];
+								raw[9] = (byte)itemArgs[i * 3];
+								raw[10] = (byte)(itemArgs[i * 3] >> 8);
+								player.SendRawData(raw);
+							}
 
-						Infos[plr].x = x;
-						Infos[plr].y = y;
-						break;
+							byte[] raw2 = new byte[] { 9, 0, 33, 0, 0, 255, 255, 255, 255 };
+							Buffer.BlockCopy(BitConverter.GetBytes((short)x), 0, raw2, 5, 2);
+							Buffer.BlockCopy(BitConverter.GetBytes((short)y), 0, raw2, 7, 2);
+							player.SendRawData(raw2);
+
+							player.SendData(PacketTypes.ChestName, chest.name ?? "Chest", 0, x, y);
+
+							Infos[plr].x = x;
+							Infos[plr].y = y;
+							break;
+					}
+					Infos[plr].action = ChestAction.NONE;
 				}
-				Infos[plr].action = ChestAction.NONE;
+			}
+			catch (Exception ex)
+			{
+				Log.Error("InfiniteChests: " + ex.Message);
 			}
 		}
 		void KillChest(int x, int y, int plr)
