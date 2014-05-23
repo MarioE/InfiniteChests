@@ -421,7 +421,7 @@ namespace InfiniteChests
 							player.SendRawData(raw);
 						}
 
-						byte[] raw2 = new byte[] { 9, 0, 33, 0, 0, 255, 255, 255, 255 };
+						byte[] raw2 = new byte[] { 10, 0, 33, 0, 0, 255, 255, 255, 255, 0 };
 						Buffer.BlockCopy(BitConverter.GetBytes((short)x), 0, raw2, 5, 2);
 						Buffer.BlockCopy(BitConverter.GetBytes((short)y), 0, raw2, 7, 2);
 						player.SendRawData(raw2);
@@ -527,7 +527,7 @@ namespace InfiniteChests
 						{
 							if (Infos[i].x == Infos[plr].x && Infos[i].y == Infos[plr].y && i != plr)
 							{
-								byte[] raw = new byte[] { 9, 0, 0, 0, 32, 0, 0, slot, (byte)stack, (byte)(stack >> 8), prefix, (byte)ID, (byte)(ID >> 8) };
+								byte[] raw = new byte[] { 11, 0, 32, 0, 0, slot, (byte)stack, (byte)(stack >> 8), prefix, (byte)ID, (byte)(ID >> 8) };
 								TShock.Players[i].SendRawData(raw);
 							}
 						}
