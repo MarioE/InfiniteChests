@@ -330,7 +330,7 @@ namespace InfiniteChests
 							chest.RefillTime == 1 ? "" : "s", chest.Flags.HasFlag(ChestFlags.Region));
 						break;
 					case ChestAction.Protect:
-						if (String.IsNullOrEmpty(chest.Account))
+						if (!String.IsNullOrEmpty(chest.Account))
 						{
 							player.SendErrorMessage("This chest is already protected.");
 							break;
@@ -462,11 +462,11 @@ namespace InfiniteChests
 							player.SendErrorMessage("This chest is not yours.");
 							break;
 						}
-						Database.Query("UPDATE Chests SET Account = NULL WHERE X = @0 AND Y = @1 AND WorldID = @2", x, y, Main.worldID);
+						Database.Query("UPDATE Chests SET Account = NULL, BankName = NULL WHERE X = @0 AND Y = @1 AND WorldID = @2", x, y, Main.worldID);
 						player.SendSuccessMessage("This chest is now un-protected.");
 						break;
 					default:
-						bool isFree = chest.Account == "";
+						bool isFree = String.IsNullOrEmpty(chest.Account);
 						bool isOwner = chest.Account == player.UserAccountName || player.Group.HasPermission("infchests.admin.editall");
 						bool isRegion = chest.IsRegion && TShock.Regions.CanBuild(x, y, player);
 						if (!isFree && !isOwner && !chest.IsPublic && !isRegion)
@@ -568,7 +568,7 @@ namespace InfiniteChests
 				WorldGen.KillTile(x, y);
 				TSPlayer.All.SendData(PacketTypes.Tile, "", 0, x, y + 1);
 			}
-			else if (chest.Account != player.UserAccountName && chest.Account != "" && !player.Group.HasPermission("infchests.admin.editall"))
+			else if (chest.Account != player.UserAccountName && !String.IsNullOrEmpty(chest.Account) && !player.Group.HasPermission("infchests.admin.editall"))
 			{
 				player.SendErrorMessage("This chest is protected.");
 				player.SendTileSquare(x, y, 3);
@@ -690,8 +690,8 @@ namespace InfiniteChests
 			}
 
 			Infos[e.Player.Index].Action = ChestAction.SetBank;
-			Infos[e.Player.Index].BankName = e.Parameters[0];
-			e.Player.SendInfoMessage("Open a chest to set it to bank chest '{0}'.", e.Parameters[0]);
+			Infos[e.Player.Index].BankName = e.Parameters[0].ToLower();
+			e.Player.SendInfoMessage("Open a chest to set it to bank chest '{0}'.", e.Parameters[0].ToLower());
 		}
 		void ConvertChests(CommandArgs e)
 		{
