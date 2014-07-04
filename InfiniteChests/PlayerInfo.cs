@@ -8,7 +8,7 @@ namespace InfiniteChests
 	public class PlayerInfo
 	{
 		public ChestAction Action;
-		public string BankName;
+		public int BankID;
 		public int Index;
 		public string Password = "";
 		public int RefillTime;

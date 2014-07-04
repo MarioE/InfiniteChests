@@ -5,7 +5,7 @@ namespace InfiniteChests
 	public class Chest
 	{
 		public string Account = "";
-		public string BankName;
+		public int BankID;
 		public ChestFlags Flags;
 		public string HashedPassword = "";
 		public string Items;
@@ -14,7 +14,7 @@ namespace InfiniteChests
 
 		public bool IsBank
 		{
-			get { return !String.IsNullOrEmpty(BankName); }
+			get { return Flags.HasFlag(ChestFlags.Bank); }
 		}
 		public bool IsPublic
 		{

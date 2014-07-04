@@ -14,6 +14,7 @@ using Terraria;
 using TerrariaApi.Server;
 using TShockAPI;
 using TShockAPI.DB;
+using System.Text.RegularExpressions;
 
 namespace InfiniteChests
 {
@@ -256,14 +257,14 @@ namespace InfiniteChests
 				new SqlColumn("Account", MySqlDbType.Text),
 				new SqlColumn("Items", MySqlDbType.Text),
 				new SqlColumn("Flags", MySqlDbType.Int32),
-				new SqlColumn("BankName", MySqlDbType.Text),
+				new SqlColumn("BankID", MySqlDbType.Int32),
 				new SqlColumn("RefillTime", MySqlDbType.Int32),
 				new SqlColumn("Password", MySqlDbType.Text),
 				new SqlColumn("WorldID", MySqlDbType.Int32)));
 
 			sqlcreator.EnsureExists(new SqlTable("BankChests",
 				new SqlColumn("Account", MySqlDbType.Text),
-				new SqlColumn("BankName", MySqlDbType.Text),
+				new SqlColumn("BankID", MySqlDbType.Int32),
 				new SqlColumn("Items", MySqlDbType.Text)));
 		}
 		void OnLeave(LeaveEventArgs e)
@@ -299,7 +300,7 @@ namespace InfiniteChests
 		void GetChest(int x, int y, int plr)
 		{
 			Chest chest = null;
-			using (QueryResult reader = Database.QueryReader("SELECT Account, BankName, Flags, Items, Password FROM Chests WHERE X = @0 AND Y = @1 AND WorldID = @2",
+			using (QueryResult reader = Database.QueryReader("SELECT Account, BankID, Flags, Items, Password FROM Chests WHERE X = @0 AND Y = @1 AND WorldID = @2",
 				x, y, Main.worldID))
 			{
 				if (reader.Read())
@@ -307,7 +308,7 @@ namespace InfiniteChests
 					chest = new Chest
 					{
 						Account = reader.Get<string>("Account"),
-						BankName = reader.Get<string>("BankName"),
+						BankID = reader.Get<int>("BankID"),
 						Flags = (ChestFlags)reader.Get<int>("Flags"),
 						Items = reader.Get<string>("Items"),
 						HashedPassword = reader.Get<string>("Password"),
@@ -326,7 +327,7 @@ namespace InfiniteChests
 					case ChestAction.GetInfo:
 						player.SendInfoMessage("X: {0} Y: {1} Account: {2} {3}Bank: {4} Refill: {5} ({6} second{7}) Region: {8}",
 							x, y, chest.Account ?? "N/A", chest.Flags.HasFlag(ChestFlags.Public) ? "(public) " : "",
-							chest.BankName ?? "N/A", chest.Flags.HasFlag(ChestFlags.Refill), chest.RefillTime,
+							chest.BankID, chest.Flags.HasFlag(ChestFlags.Refill), chest.RefillTime,
 							chest.RefillTime == 1 ? "" : "s", chest.Flags.HasFlag(ChestFlags.Region));
 						break;
 					case ChestAction.Protect:
@@ -378,30 +379,30 @@ namespace InfiniteChests
 							player.SendErrorMessage("This chest is not yours.");
 							break;
 						}
-						if (String.Equals(info.BankName, "remove", StringComparison.CurrentCultureIgnoreCase))
+						if (info.BankID == -1)
 						{
-							Database.Query("UPDATE Chests SET BankName = '' WHERE X = @0 AND Y = @1 AND WorldID = @2", x, y, Main.worldID);
-							player.SendSuccessMessage("This chest is no longer a bank chest.", chest.BankName);
+							Database.Query("UPDATE Chests SET BankID = 0, Flags = Flags & 7 WHERE X = @0 AND Y = @1 AND WorldID = @2", x, y, Main.worldID);
+							player.SendSuccessMessage("This chest is no longer a bank chest.", chest.BankID);
 						}
 						else
 						{
 							bool exists = false;
-							using (var reader = Database.QueryReader("SELECT * FROM BankChests WHERE Account = @0 AND BankName = @1",
-								chest.Account, info.BankName))
+							using (var reader = Database.QueryReader("SELECT * FROM BankChests WHERE Account = @0 AND BankID = @1",
+								chest.Account, info.BankID))
 							{
 								exists = reader.Read();
 							}
 
 							if (!exists)
 							{
-								Database.Query("INSERT INTO BankChests (Account, BankName, Items) VALUES (@0, @1, @2)",
-									chest.Account, info.BankName,
+								Database.Query("INSERT INTO BankChests (Account, BankID, Items) VALUES (@0, @1, @2)",
+									chest.Account, info.BankID,
 									"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0," +
 									"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0");
 							}
 
-							Database.Query("UPDATE Chests SET BankName = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3", info.BankName, x, y, Main.worldID);
-							player.SendSuccessMessage("This chest is now bank chest '{0}'.", info.BankName);
+							Database.Query("UPDATE Chests SET BankID = @0, Flags = Flags | 8 WHERE X = @1 AND Y = @2 AND WorldID = @3", info.BankID, x, y, Main.worldID);
+							player.SendSuccessMessage("This chest is now bank ID {0}.", info.BankID);
 						}
 						break;
 					case ChestAction.SetPassword:
@@ -462,7 +463,7 @@ namespace InfiniteChests
 							player.SendErrorMessage("This chest is not yours.");
 							break;
 						}
-						Database.Query("UPDATE Chests SET Account = NULL, BankName = NULL WHERE X = @0 AND Y = @1 AND WorldID = @2", x, y, Main.worldID);
+						Database.Query("UPDATE Chests SET Account = NULL, BankID = 0, Flags = 0 WHERE X = @0 AND Y = @1 AND WorldID = @2", x, y, Main.worldID);
 						player.SendSuccessMessage("This chest is now un-protected.");
 						break;
 					default:
@@ -490,8 +491,8 @@ namespace InfiniteChests
 
 						if (chest.IsBank)
 						{
-							using (QueryResult reader = Database.QueryReader("SELECT Items FROM BankChests WHERE Account = @0 AND BankName = @1",
-								chest.Account, chest.BankName))
+							using (QueryResult reader = Database.QueryReader("SELECT Items FROM BankChests WHERE Account = @0 AND BankID = @1",
+								chest.Account, chest.BankID))
 							{
 								if (reader.Read())
 									chest.Items = reader.Get<string>("Items");
@@ -596,7 +597,7 @@ namespace InfiniteChests
 			lock (Database)
 			{
 				Chest chest = null;
-				using (QueryResult reader = Database.QueryReader("SELECT Account, BankName, Flags, Items FROM Chests WHERE X = @0 AND Y = @1 AND WorldID = @2",
+				using (QueryResult reader = Database.QueryReader("SELECT Account, BankID, Flags, Items FROM Chests WHERE X = @0 AND Y = @1 AND WorldID = @2",
 					Infos[plr].X, Infos[plr].Y, Main.worldID))
 				{
 					if (reader.Read())
@@ -604,7 +605,7 @@ namespace InfiniteChests
 						chest = new Chest
 						{
 							Account = reader.Get<string>("Account"),
-							BankName = reader.Get<string>("BankName"),
+							BankID = reader.Get<int>("BankID"),
 							Flags = (ChestFlags)reader.Get<int>("Flags"),
 							Items = reader.Get<string>("Items")
 						};
@@ -620,8 +621,8 @@ namespace InfiniteChests
 
 				if (chest.IsBank)
 				{
-					using (QueryResult reader = Database.QueryReader("SELECT Items FROM BankChests WHERE Account = @0 AND BankName = @1",
-						chest.Account, chest.BankName))
+					using (QueryResult reader = Database.QueryReader("SELECT Items FROM BankChests WHERE Account = @0 AND BankID = @1",
+						chest.Account, chest.BankID))
 					{
 						if (reader.Read())
 							chest.Items = reader.Get<string>("Items");
@@ -657,8 +658,8 @@ namespace InfiniteChests
 
 					if (chest.IsBank)
 					{
-						Database.Query("UPDATE BankChests SET Items = @0 WHERE Account = @1 AND BankName = @2",
-							newItems.ToString(0, newItems.Length - 1), chest.Account, chest.BankName);
+						Database.Query("UPDATE BankChests SET Items = @0 WHERE Account = @1 AND BankID = @2",
+							newItems.ToString(0, newItems.Length - 1), chest.Account, chest.BankID);
 					}
 					else
 					{
@@ -685,13 +686,47 @@ namespace InfiniteChests
 		{
 			if (e.Parameters.Count != 1)
 			{
-				e.Player.SendErrorMessage("Invalid syntax! Proper syntax: /cbank <name>");
+				e.Player.SendErrorMessage("Invalid syntax! Proper syntax: /cbank <ID>");
 				return;
 			}
 
+			int bankID;
+			if (!int.TryParse(e.Parameters[0], out bankID) || bankID <= 0)
+			{
+				if (String.Equals(e.Parameters[0], "remove", StringComparison.CurrentCultureIgnoreCase))
+				{
+					Infos[e.Player.Index].Action = ChestAction.SetBank;
+					Infos[e.Player.Index].BankID = -1;
+					e.Player.SendInfoMessage("Open a chest to remove its bank ID.", e.Parameters[0].ToLower());
+				}
+				else
+					e.Player.SendErrorMessage("Invalid bank ID.");
+				return;
+			}
+
+			if (!e.Player.Group.HasPermission("infchests.chest.bank.*"))
+			{
+				int maxBankIDs = 0;
+				foreach (string permission in e.Player.Group.permissions)
+				{
+					Match Match = Regex.Match(permission, @"infchests\.chest\.bank\.(\d+)");
+					if (Match.Success && Match.Value == permission)
+					{
+						maxBankIDs = Convert.ToInt32(Match.Groups[1].Value);
+						break;
+					}
+				}
+
+				if (bankID > maxBankIDs)
+				{
+					e.Player.SendErrorMessage("You have exceeded your maximum number of bank IDs.");
+					return;
+				}
+			}
+
 			Infos[e.Player.Index].Action = ChestAction.SetBank;
-			Infos[e.Player.Index].BankName = e.Parameters[0].ToLower();
-			e.Player.SendInfoMessage("Open a chest to set it to bank chest '{0}'.", e.Parameters[0].ToLower());
+			Infos[e.Player.Index].BankID = bankID;
+			e.Player.SendInfoMessage("Open a chest to set its bank ID to {0}.", bankID);
 		}
 		void ConvertChests(CommandArgs e)
 		{
@@ -723,7 +758,7 @@ namespace InfiniteChests
 		{
 			var info = Infos[e.Player.Index];
 			info.Action = ChestAction.None;
-			info.BankName = null;
+			info.BankID = 0;
 			info.Password = null;
 			e.Player.SendInfoMessage("Stopped selecting a chest.");
 		}

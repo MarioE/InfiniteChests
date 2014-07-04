@@ -10,6 +10,7 @@ namespace InfiniteChests
 	{
 		Public = 1,
 		Region = 2,
-		Refill = 4
+		Refill = 4,
+		Bank = 8
 	}
 }
