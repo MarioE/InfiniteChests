@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Data;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Threading;
@@ -19,10 +20,10 @@ namespace InfiniteChests
 	[ApiVersion(1, 16)]
 	public class InfiniteChests : TerrariaPlugin
 	{
-		IDbConnection Database;
-		PlayerInfo[] Infos = new PlayerInfo[256];
-		System.Timers.Timer Timer = new System.Timers.Timer(1000);
-		Dictionary<Point, int> Timers = new Dictionary<Point, int>();
+		private IDbConnection Database;
+		private PlayerInfo[] Infos = new PlayerInfo[256];
+		private System.Timers.Timer Timer = new System.Timers.Timer(1000);
+		private Dictionary<Point, int> Timers = new Dictionary<Point, int>();
 
 		public override string Author
 		{
@@ -45,9 +46,7 @@ namespace InfiniteChests
 			: base(game)
 		{
 			for (int i = 0; i < 256; i++)
-			{
-				Infos[i] = new PlayerInfo();
-			}
+				Infos[i] = new PlayerInfo() { Index = i };
 			Order = 1;
 		}
 
@@ -124,12 +123,12 @@ namespace InfiniteChests
 						case PacketTypes.ChestOpen:
 							{
 								reader.ReadInt16();
-								reader.ReadInt16();
-								reader.ReadInt16();
-								string name = reader.ReadString();
+								int x = reader.ReadInt16();
+								int y = reader.ReadInt16();
+								int length = reader.ReadByte();
 
-								if (name.Length > 0)
-									Task.Factory.StartNew(() => NameChest(Infos[plr].x, Infos[plr].y, plr, name));
+								if (length != 0 && length <= 20 && length != 255)
+									TShock.Players[plr].SendData(PacketTypes.ChestName, "", 0, x, y);
 							}
 							break;
 						case PacketTypes.TileKill:
@@ -167,17 +166,67 @@ namespace InfiniteChests
 		}
 		void OnInitialize(EventArgs e)
 		{
-			Commands.ChatCommands.Add(new Command("infchests.chest.deselect", Deselect, "ccset"));
-			Commands.ChatCommands.Add(new Command("infchests.admin.info", Info, "cinfo"));
-			Commands.ChatCommands.Add(new Command("infchests.chest.lock", Lock, "clock") { DoLog = false });
-			Commands.ChatCommands.Add(new Command("infchests.admin.convert", ConvertChests, "convchests"));
-			Commands.ChatCommands.Add(new Command("infchests.admin.prune", Prune, "prunechests"));
-			Commands.ChatCommands.Add(new Command("infchests.chest.public", PublicProtect, "cpset"));
-			Commands.ChatCommands.Add(new Command("infchests.admin.refill", Refill, "crefill"));
-			Commands.ChatCommands.Add(new Command("infchests.chest.region", RegionProtect, "crset"));
-			Commands.ChatCommands.Add(new Command("infchests.chest.protect", Protect, "cset"));
-			Commands.ChatCommands.Add(new Command("infchests.chest.unlock", Unlock, "cunlock") { DoLog = false });
-			Commands.ChatCommands.Add(new Command("infchests.chest.unprotect", Unprotect, "cunset"));
+			Commands.ChatCommands.Add(new Command("infchests.chest.bank", Bank, "cbank")
+			{
+				DoLog = false,
+				HelpText = "Toggles a chests's bank status when selected."
+			});
+			Commands.ChatCommands.Add(new Command("infchests.chest.deselect", Deselect, "ccset")
+			{
+				AllowServer = false,
+				HelpText = "Cancels a chest selection."
+			});
+			Commands.ChatCommands.Add(new Command("infchests.admin.info", Info, "cinfo")
+			{
+				AllowServer = false,
+				HelpText = "Gets information about a chest when selected."
+			});
+			Commands.ChatCommands.Add(new Command("infchests.chest.lock", Lock, "clock")
+			{
+				DoLog = false,
+				HelpText = "Locks a chest with a password. Use remove as the password to remove it."
+			});
+			Commands.ChatCommands.Add(new Command("infchests.admin.convert", ConvertChests, "convchests")
+			{
+				HelpText = "Converts Terraria chests to InfiniteChests chests."
+			});
+			Commands.ChatCommands.Add(new Command("infchests.admin.prune", Prune, "prunechests")
+			{
+				HelpText = "Prunes empty chests."
+			});
+			Commands.ChatCommands.Add(new Command("infchests.chest.public", PublicProtect, "cpset")
+			{
+				AllowServer = false,
+				HelpText = "Toggles a chest's publicity when selected."
+			});
+			Commands.ChatCommands.Add(new Command("infchests.admin.refill", Refill, "crefill")
+			{
+				AllowServer = false,
+				HelpText = "Toggles a chest's refill status (with optional refill time) when selected."
+			});
+			Commands.ChatCommands.Add(new Command("infchests.chest.region", RegionProtect, "crset")
+			{
+				AllowServer = false,
+				HelpText = "Toggles a chest's region sharing status when selected."
+			});
+			Commands.ChatCommands.Add(new Command("infchests.admin.rconvert", ReverseConvertChests, "rconvchests")
+			{
+				HelpText = "Converts InfiniteChests chests to Terraria chests."
+			});
+			Commands.ChatCommands.Add(new Command("infchests.chest.protect", Protect, "cset")
+			{
+				AllowServer = false,
+				HelpText = "Protects an unprotected chest when selected."
+			});
+			Commands.ChatCommands.Add(new Command("infchests.chest.unlock", Unlock, "cunlock")
+			{
+				DoLog = false,
+				HelpText = "Unlocks a chest with a password."
+			});
+			Commands.ChatCommands.Add(new Command("infchests.chest.unprotect", Unprotect, "cunset")
+			{
+				HelpText = "Unprotects a chest when selected."
+			});
 
 			switch (TShock.Config.StorageType.ToLower())
 			{
@@ -207,8 +256,15 @@ namespace InfiniteChests
 				new SqlColumn("Account", MySqlDbType.Text),
 				new SqlColumn("Items", MySqlDbType.Text),
 				new SqlColumn("Flags", MySqlDbType.Int32),
+				new SqlColumn("BankName", MySqlDbType.Text),
+				new SqlColumn("RefillTime", MySqlDbType.Int32),
 				new SqlColumn("Password", MySqlDbType.Text),
 				new SqlColumn("WorldID", MySqlDbType.Int32)));
+
+			sqlcreator.EnsureExists(new SqlTable("BankChests",
+				new SqlColumn("Account", MySqlDbType.Text),
+				new SqlColumn("BankName", MySqlDbType.Text),
+				new SqlColumn("Items", MySqlDbType.Text)));
 		}
 		void OnLeave(LeaveEventArgs e)
 		{
@@ -217,16 +273,16 @@ namespace InfiniteChests
 		void OnPostInitialize(EventArgs e)
 		{
 			int converted = 0;
-			StringBuilder items = new StringBuilder();
+			var items = new StringBuilder();
 			for (int i = 0; i < 1000; i++)
 			{
 				Terraria.Chest c = Main.chest[i];
 				if (c != null)
 				{
 					for (int j = 0; j < 40; j++)
-						items.Append("," + c.item[j].netID + "," + c.item[j].stack + "," + c.item[j].prefix);
+						items.Append(c.item[j].netID).Append(",").Append(c.item[j].stack).Append(",").Append(c.item[j].prefix).Append(",");
 					Database.Query("INSERT INTO Chests (X, Y, Account, Items, WorldID) VALUES (@0, @1, '', @2, @3)",
-						c.x, c.y, items.ToString().Substring(1), Main.worldID);
+						c.x, c.y, items.ToString(0, items.Length - 1), Main.worldID);
 					converted++;
 					items.Clear();
 					Main.chest[i] = null;
@@ -243,147 +299,184 @@ namespace InfiniteChests
 		void GetChest(int x, int y, int plr)
 		{
 			Chest chest = null;
-			using (QueryResult reader = Database.QueryReader("SELECT Account, Flags, Items, Name, Password FROM Chests WHERE X = @0 AND Y = @1 and WorldID = @2",
+			using (QueryResult reader = Database.QueryReader("SELECT Account, BankName, Flags, Items, Password FROM Chests WHERE X = @0 AND Y = @1 AND WorldID = @2",
 				x, y, Main.worldID))
 			{
 				if (reader.Read())
 				{
 					chest = new Chest
 					{
-						account = reader.Get<string>("Account"),
-						flags = (ChestFlags)reader.Get<int>("Flags"),
-						items = reader.Get<string>("Items"),
-						name = reader.Get<string>("Name"),
-						password = reader.Get<string>("Password")
+						Account = reader.Get<string>("Account"),
+						BankName = reader.Get<string>("BankName"),
+						Flags = (ChestFlags)reader.Get<int>("Flags"),
+						Items = reader.Get<string>("Items"),
+						HashedPassword = reader.Get<string>("Password"),
+						RefillTime = reader.Get<int>("RefillTime")
 					};
 				}
 			}
+
+			var info = Infos[plr];
 			TSPlayer player = TShock.Players[plr];
 
 			if (chest != null)
 			{
-				switch (Infos[plr].action)
+				switch (info.Action)
 				{
-					case ChestAction.INFO:
-						player.SendInfoMessage("X: {0} Y: {1} Account: {2} {3}Refill: {4} ({5} second{6}) Region: {7}",
-							x, y, chest.account == "" ? "N/A" : chest.account, ((chest.flags & ChestFlags.PUBLIC) != 0) ? "(public) " : "",
-							(chest.flags & ChestFlags.REFILL) != 0, (int)chest.flags / 8, (int)chest.flags / 8 == 1 ? "" : "s",
-							(chest.flags & ChestFlags.REGION) != 0);
+					case ChestAction.GetInfo:
+						player.SendInfoMessage("X: {0} Y: {1} Account: {2} {3}Bank: {4} Refill: {5} ({6} second{7}) Region: {8}",
+							x, y, chest.Account ?? "N/A", chest.Flags.HasFlag(ChestFlags.Public) ? "(public) " : "",
+							chest.BankName ?? "N/A", chest.Flags.HasFlag(ChestFlags.Refill), chest.RefillTime,
+							chest.RefillTime == 1 ? "" : "s", chest.Flags.HasFlag(ChestFlags.Region));
 						break;
-					case ChestAction.PROTECT:
-						if (chest.account != "")
+					case ChestAction.Protect:
+						if (String.IsNullOrEmpty(chest.Account))
 						{
 							player.SendErrorMessage("This chest is already protected.");
 							break;
 						}
-						Database.Query("UPDATE Chests SET Account = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
-							player.UserAccountName, x, y, Main.worldID);
+						Database.Query("UPDATE Chests SET Account = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3", player.UserAccountName, x, y, Main.worldID);
 						player.SendSuccessMessage("This chest is now protected.");
 						break;
-					case ChestAction.PUBLIC:
-						if (chest.account == "")
+					case ChestAction.TogglePublic:
+						if (String.IsNullOrEmpty(chest.Account))
 						{
 							player.SendErrorMessage("This chest is not protected.");
 							break;
 						}
-						if (chest.account != player.UserAccountName && !player.Group.HasPermission("infchests.admin.editall"))
+						if (chest.Account != player.UserAccountName && !player.Group.HasPermission("infchests.admin.editall"))
 						{
 							player.SendErrorMessage("This chest is not yours.");
 							break;
 						}
-						Database.Query("UPDATE Chests SET Flags = ((~(Flags & 1)) & (Flags | 1)) WHERE X = @0 AND Y = @1 AND WorldID = @2",
-							x, y, Main.worldID);
-						player.SendSuccessMessage("This chest is now {0}.",
-							(chest.flags & ChestFlags.PUBLIC) != 0 ? "private" : "public");
+						Database.Query("UPDATE Chests SET Flags = ((~(Flags & 1)) & (Flags | 1)) WHERE X = @0 AND Y = @1 AND WorldID = @2", x, y, Main.worldID);
+						player.SendSuccessMessage("This chest is now p{0}.", chest.IsPublic ? "rivate" : "ublic");
 						break;
-					case ChestAction.REFILL:
-						if (chest.account != player.UserAccountName && chest.account != "" && !player.Group.HasPermission("infchests.admin.editall"))
-						{
-							player.SendErrorMessage("This chest is not yours.");
-							break;
-						}
-						if (Infos[plr].time > 0)
-						{
-							Database.Query("UPDATE Chests SET Flags = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
-								((int)chest.flags & 3) + (Infos[plr].time * 8) + 4, x, y, Main.worldID);
-							player.SendSuccessMessage(string.Format("This chest will now refill with a delay of {0} second{1}.", Infos[plr].time,
-								Infos[plr].time == 1 ? "" : "s"));
-						}
-						else
-						{
-							Database.Query("UPDATE Chests SET Flags = ((~(Flags & 4)) & (Flags | 4)) & 7 WHERE X = @0 AND Y = @1 AND WorldID = @2",
-								x, y, Main.worldID);
-							player.SendSuccessMessage("This chest will {0} refill.",
-								(chest.flags & ChestFlags.REFILL) != 0 ? "no longer" : "now");
-						}
-						break;
-					case ChestAction.REGION:
-						if (chest.account == "")
+					case ChestAction.ToggleRegion:
+						if (String.IsNullOrEmpty(chest.Account))
 						{
 							player.SendErrorMessage("This chest is not protected.");
 							break;
 						}
-						if (chest.account != player.UserAccountName && !player.Group.HasPermission("infchests.admin.editall"))
+						if (chest.Account != player.UserAccountName && !player.Group.HasPermission("infchests.admin.editall"))
 						{
 							player.SendErrorMessage("This chest is not yours.");
 							break;
 						}
 						Database.Query("UPDATE Chests SET Flags = ((~(Flags & 2)) & (Flags | 2)) WHERE X = @0 AND Y = @1 AND WorldID = @2",
 							x, y, Main.worldID);
-						player.SendSuccessMessage("This chest is {0} region shared.",
-							(chest.flags & ChestFlags.REGION) != 0 ? "no longer" : "now");
+						player.SendSuccessMessage("This chest is no{0} region shared.", chest.IsRegion ? " longer" : "w");
 						break;
-					case ChestAction.SETPASS:
-						if (chest.account == "")
+					case ChestAction.SetBank:
+						if (String.IsNullOrEmpty(chest.Account))
 						{
 							player.SendErrorMessage("This chest is not protected.");
 							break;
 						}
-						if (chest.account != player.UserAccountName && !player.Group.HasPermission("infchests.admin.editall"))
+						if (chest.Account != player.UserAccountName && !player.Group.HasPermission("infchests.admin.editall"))
 						{
 							player.SendErrorMessage("This chest is not yours.");
 							break;
 						}
-						if (Infos[plr].password.ToLower() == "remove")
+						if (String.Equals(info.BankName, "remove", StringComparison.CurrentCultureIgnoreCase))
 						{
-							Database.Query("UPDATE Chests SET Password = '' WHERE X = @0 AND Y = @1 AND WorldID = @2",
-								x, y, Main.worldID);
+							Database.Query("UPDATE Chests SET BankName = '' WHERE X = @0 AND Y = @1 AND WorldID = @2", x, y, Main.worldID);
+							player.SendSuccessMessage("This chest is no longer a bank chest.", chest.BankName);
+						}
+						else
+						{
+							bool exists = false;
+							using (var reader = Database.QueryReader("SELECT * FROM BankChests WHERE Account = @0 AND BankName = @1",
+								chest.Account, info.BankName))
+							{
+								exists = reader.Read();
+							}
+
+							if (!exists)
+							{
+								Database.Query("INSERT INTO BankChests (Account, BankName, Items) VALUES (@0, @1, @2)",
+									chest.Account, info.BankName,
+									"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0," +
+									"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0");
+							}
+
+							Database.Query("UPDATE Chests SET BankName = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3", info.BankName, x, y, Main.worldID);
+							player.SendSuccessMessage("This chest is now bank chest '{0}'.", info.BankName);
+						}
+						break;
+					case ChestAction.SetPassword:
+						if (String.IsNullOrEmpty(chest.Account))
+						{
+							player.SendErrorMessage("This chest is not protected.");
+							break;
+						}
+						if (chest.Account != player.UserAccountName && !player.Group.HasPermission("infchests.admin.editall"))
+						{
+							player.SendErrorMessage("This chest is not yours.");
+							break;
+						}
+						if (String.Equals(info.Password, "remove", StringComparison.CurrentCultureIgnoreCase))
+						{
+							Database.Query("UPDATE Chests SET Password = '' WHERE X = @0 AND Y = @1 AND WorldID = @2", x, y, Main.worldID);
+							player.SendSuccessMessage("This chest is no longer password protected.", info.Password);
 						}
 						else
 						{
 							Database.Query("UPDATE Chests SET Password = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
-								TShock.Utils.HashPassword(Infos[plr].password), x, y, Main.worldID);
+								TShock.Utils.HashPassword(info.Password), x, y, Main.worldID);
+							player.SendSuccessMessage("This chest is now password protected with password '{0}'.", info.Password);
 						}
-						player.SendSuccessMessage("This chest is now password protected.");
 						break;
-					case ChestAction.UNPROTECT:
-						if (chest.account == "")
+					case ChestAction.SetRefill:
+						if (String.IsNullOrEmpty(chest.Account))
 						{
 							player.SendErrorMessage("This chest is not protected.");
 							break;
 						}
-						if (chest.account != player.UserAccountName && !player.Group.HasPermission("infchests.admin.editall"))
+						if (chest.Account != player.UserAccountName && !player.Group.HasPermission("infchests.admin.editall"))
 						{
 							player.SendErrorMessage("This chest is not yours.");
 							break;
 						}
-						Database.Query("UPDATE Chests SET Account = '' WHERE X = @0 AND Y = @1 AND WorldID = @2",
-							x, y, Main.worldID);
+						if (info.RefillTime > 0)
+						{
+							Database.Query("UPDATE Chests SET Flags = @0, RefillTime = @1 WHERE X = @2 AND Y = @3 AND WorldID = @4",
+								chest.Flags | ChestFlags.Refill, info.RefillTime, x, y, Main.worldID);
+							player.SendSuccessMessage("This chest will now refill with a delay of {0} second{1}.", info.RefillTime, info.RefillTime == 1 ? "" : "s");
+						}
+						else
+						{
+							Database.Query("UPDATE Chests SET Flags = (~(Flags & 4)) & (Flags | 4) WHERE X = @0 AND Y = @1 AND WorldID = @2",
+								x, y, Main.worldID);
+							player.SendSuccessMessage("This chest will no{0} refill.", chest.IsRefill ? " longer" : "w");
+						}
+						break;
+					case ChestAction.Unprotect:
+						if (String.IsNullOrEmpty(chest.Account))
+						{
+							player.SendErrorMessage("This chest is not protected.");
+							break;
+						}
+						if (chest.Account != player.UserAccountName && !player.Group.HasPermission("infchests.admin.editall"))
+						{
+							player.SendErrorMessage("This chest is not yours.");
+							break;
+						}
+						Database.Query("UPDATE Chests SET Account = NULL WHERE X = @0 AND Y = @1 AND WorldID = @2", x, y, Main.worldID);
 						player.SendSuccessMessage("This chest is now un-protected.");
 						break;
 					default:
-						bool isFree = chest.account == "";
-						bool isOwner = chest.account == player.UserAccountName || player.Group.HasPermission("infchests.admin.editall");
-						bool isPub = chest.flags.HasFlag(ChestFlags.PUBLIC);
-						bool isRegion = chest.flags.HasFlag(ChestFlags.REGION) && TShock.Regions.CanBuild(x, y, player);
-						if (!isFree && !isOwner && !isPub && !isRegion)
+						bool isFree = chest.Account == "";
+						bool isOwner = chest.Account == player.UserAccountName || player.Group.HasPermission("infchests.admin.editall");
+						bool isRegion = chest.IsRegion && TShock.Regions.CanBuild(x, y, player);
+						if (!isFree && !isOwner && !chest.IsPublic && !isRegion)
 						{
-							if (String.IsNullOrEmpty(chest.password))
+							if (String.IsNullOrEmpty(chest.HashedPassword))
 							{
 								player.SendErrorMessage("This chest is protected.");
 								break;
 							}
-							else if (TShock.Utils.HashPassword(Infos[plr].password) != chest.password)
+							else if (TShock.Utils.HashPassword(info.Password) != chest.HashedPassword)
 							{
 								player.SendErrorMessage("This chest is password protected.");
 								break;
@@ -391,12 +484,28 @@ namespace InfiniteChests
 							else
 							{
 								player.SendSuccessMessage("Chest unlocked.");
-								Infos[plr].password = "";
+								info.Password = "";
 							}
 						}
-						int timeLeft;
+
+						if (chest.IsBank)
+						{
+							using (QueryResult reader = Database.QueryReader("SELECT Items FROM BankChests WHERE Account = @0 AND BankName = @1",
+								chest.Account, chest.BankName))
+							{
+								if (reader.Read())
+									chest.Items = reader.Get<string>("Items");
+								else
+								{
+									player.SendErrorMessage("This bank chest was corrupted.");
+									break;
+								}
+							}
+						}
+
 						lock (Timers)
 						{
+							int timeLeft;
 							if (Timers.TryGetValue(new Point(x, y), out timeLeft) && timeLeft > 0)
 							{
 								player.SendErrorMessage("This chest will refill in {0} second{1}.", timeLeft, timeLeft == 1 ? "" : "s");
@@ -405,7 +514,7 @@ namespace InfiniteChests
 						}
 
 						int[] itemArgs = new int[120];
-						string[] split = chest.items.Split(',');
+						string[] split = chest.Items.Split(',');
 						for (int i = 0; i < 120; i++)
 							itemArgs[i] = Convert.ToInt32(split[i]);
                         
@@ -425,33 +534,51 @@ namespace InfiniteChests
 						Buffer.BlockCopy(BitConverter.GetBytes((short)x), 0, raw2, 5, 2);
 						Buffer.BlockCopy(BitConverter.GetBytes((short)y), 0, raw2, 7, 2);
 						player.SendRawData(raw2);
+						player.SendData(PacketTypes.ChestName, "", 0, x, y);
 
-						player.SendData(PacketTypes.ChestName, chest.name ?? "Chest", 0, x, y);
-
-						Infos[plr].x = x;
-						Infos[plr].y = y;
+						info.X = x;
+						info.Y = y;
 						break;
 				}
-				Infos[plr].action = ChestAction.NONE;
+				info.Action = ChestAction.None;
 			}
+			else
+				player.SendErrorMessage("This chest is corrupted. Please destroy it.");
 		}
 		void KillChest(int x, int y, int plr)
 		{
 			Chest chest = null;
-			using (QueryResult reader = Database.QueryReader("SELECT Account, Items FROM Chests WHERE X = @0 AND Y = @1 AND WorldID = @2",
+			using (QueryResult reader = Database.QueryReader("SELECT Account, Flags, Items FROM Chests WHERE X = @0 AND Y = @1 AND WorldID = @2",
 				x, y, Main.worldID))
 			{
 				if (reader.Read())
-					chest = new Chest { account = reader.Get<string>("Account"), items = reader.Get<string>("Items") };
+				{
+					chest = new Chest
+					{
+						Account = reader.Get<string>("Account"),
+						Flags = (ChestFlags)reader.Get<int>("Flags"),
+						Items = reader.Get<string>("Items")
+					};
+				}
 			}
 
 			TSPlayer player = TShock.Players[plr];
-			if (chest != null && chest.account != player.UserAccountName && chest.account != "" && !player.Group.HasPermission("infchests.admin.editall"))
+			if (chest == null)
+			{
+				WorldGen.KillTile(x, y);
+				TSPlayer.All.SendData(PacketTypes.Tile, "", 0, x, y + 1);
+			}
+			else if (chest.Account != player.UserAccountName && chest.Account != "" && !player.Group.HasPermission("infchests.admin.editall"))
 			{
 				player.SendErrorMessage("This chest is protected.");
 				player.SendTileSquare(x, y, 3);
 			}
-			else if (chest != null && chest.items !=
+			else if (chest.IsBank)
+			{
+				player.SendErrorMessage("This chest is a bank chest.");
+				player.SendTileSquare(x, y, 3);
+			}
+			else if (chest.Items !=
 				"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0," +
 				"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0")
 			{
@@ -464,73 +591,82 @@ namespace InfiniteChests
 				TSPlayer.All.SendData(PacketTypes.Tile, "", 0, x, y + 1);
 			}
 		}
-		void NameChest(int x, int y, int plr, string name)
-		{
-			Chest chest = null;
-			using (QueryResult reader = Database.QueryReader("SELECT Account FROM Chests WHERE X = @0 AND Y = @1 AND WorldID = @2",
-				x, y, Main.worldID))
-			{
-				if (reader.Read())
-					chest = new Chest { account = reader.Get<string>("Account") };
-			}
-
-			TSPlayer player = TShock.Players[plr];
-			if (chest != null && chest.account != player.UserAccountName && chest.account != "" && !player.Group.HasPermission("infchests.admin.editall"))
-			{
-				player.SendErrorMessage("This chest is protected.");
-				player.SendTileSquare(x, y, 3);
-			}
-			else
-				Database.Query("UPDATE Chests SET Name = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3", name, x, y, Main.worldID);
-		}
 		void ModChest(int plr, byte slot, int ID, int stack, byte prefix)
 		{
 			lock (Database)
 			{
 				Chest chest = null;
-				using (QueryResult reader = Database.QueryReader("SELECT Account, Flags, Items FROM Chests WHERE X = @0 AND Y = @1 AND WorldID = @2",
-					Infos[plr].x, Infos[plr].y, Main.worldID))
+				using (QueryResult reader = Database.QueryReader("SELECT Account, BankName, Flags, Items FROM Chests WHERE X = @0 AND Y = @1 AND WorldID = @2",
+					Infos[plr].X, Infos[plr].Y, Main.worldID))
 				{
 					if (reader.Read())
-						chest = new Chest { flags = (ChestFlags)reader.Get<int>("Flags"), items = reader.Get<string>("Items"), account = reader.Get<string>("Account") };
-				}
-				TSPlayer player = TShock.Players[plr];
-
-				if (chest != null)
-				{
-					if ((chest.flags & ChestFlags.REFILL) != 0)
 					{
-						lock (Timers)
+						chest = new Chest
 						{
-							if (!Timers.ContainsKey(new Point(Infos[plr].x, Infos[plr].y)))
-								Timers.Add(new Point(Infos[plr].x, Infos[plr].y), (int)chest.flags >> 3);
+							Account = reader.Get<string>("Account"),
+							BankName = reader.Get<string>("BankName"),
+							Flags = (ChestFlags)reader.Get<int>("Flags"),
+							Items = reader.Get<string>("Items")
+						};
+					}
+				}
+
+				TSPlayer player = TShock.Players[plr];
+				if (chest == null)
+				{
+					player.SendErrorMessage("This chest is corrupted. Please remove it.");
+					return;
+				}
+
+				if (chest.IsBank)
+				{
+					using (QueryResult reader = Database.QueryReader("SELECT Items FROM BankChests WHERE Account = @0 AND BankName = @1",
+						chest.Account, chest.BankName))
+					{
+						if (reader.Read())
+							chest.Items = reader.Get<string>("Items");
+						else
+						{
+							player.SendErrorMessage("This bank chest was corrupted.");
+							return;
 						}
+					}
+				}
+
+				var info = Infos[plr];
+				if (chest.IsRefill)
+				{
+					lock (Timers)
+					{
+						if (!Timers.ContainsKey(new Point(info.X, info.Y)))
+							Timers.Add(new Point(info.X, info.Y), chest.RefillTime);
+					}
+				}
+				else
+				{
+					int[] itemArgs = new int[120];
+					string[] split = chest.Items.Split(',');
+					for (int i = 0; i < 120; i++)
+						itemArgs[i] = Convert.ToInt32(split[i]);
+					itemArgs[slot * 3] = ID;
+					itemArgs[slot * 3 + 1] = stack;
+					itemArgs[slot * 3 + 2] = prefix;
+					StringBuilder newItems = new StringBuilder();
+					for (int i = 0; i < 120; i++)
+						newItems.Append(itemArgs[i]).Append(",");
+
+					if (chest.IsBank)
+					{
+						Database.Query("UPDATE BankChests SET Items = @0 WHERE Account = @1 AND BankName = @2",
+							newItems.ToString(0, newItems.Length - 1), chest.Account, chest.BankName);
 					}
 					else
 					{
-						int[] itemArgs = new int[120];
-						string[] split = chest.items.Split(',');
-						for (int i = 0; i < 120; i++)
-						{
-							itemArgs[i] = Convert.ToInt32(split[i]);
-						}
-						itemArgs[slot * 3] = ID;
-						itemArgs[slot * 3 + 1] = stack;
-						itemArgs[slot * 3 + 2] = prefix;
-						StringBuilder newItems = new StringBuilder();
-						for (int i = 0; i < 120; i++)
-							newItems.Append("," + itemArgs[i]);
 						Database.Query("UPDATE Chests SET Items = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
-							newItems.ToString().Substring(1), Infos[plr].x, Infos[plr].y, Main.worldID);
-
-						for (int i = 0; i < 256; i++)
-						{
-							if (Infos[i].x == Infos[plr].x && Infos[i].y == Infos[plr].y && i != plr)
-							{
-								byte[] raw = new byte[] { 11, 0, 32, 0, 0, slot, (byte)stack, (byte)(stack >> 8), prefix, (byte)ID, (byte)(ID >> 8) };
-								TShock.Players[i].SendRawData(raw);
-							}
-						}
+							newItems.ToString(0, newItems.Length - 1), info.X, info.Y, Main.worldID);
+						byte[] raw = new byte[] { 11, 0, 32, 0, 0, slot, (byte)stack, (byte)(stack >> 8), prefix, (byte)ID, (byte)(ID >> 8) };
+						foreach (int i in Infos.Where(i => i.X == info.X && i.Y == info.Y && i != info).Select(i => i.Index))
+							TShock.Players[i].SendRawData(raw);
 					}
 				}
 			}
@@ -538,47 +674,62 @@ namespace InfiniteChests
 		void PlaceChest(int x, int y, int plr)
 		{
 			TSPlayer player = TShock.Players[plr];
-			Database.Query("INSERT INTO Chests (X, Y, Name, Account, Flags, Items, Password, WorldID) VALUES (@0, @1, @2, @3, @4, @5, \'\', @6)",
-				x, y - 1, "Chest", (player.IsLoggedIn && player.Group.HasPermission("infchests.chest.protect")) ? player.UserAccountName : "", 0,
+			Database.Query("INSERT INTO Chests (X, Y, Account, Flags, Items, Password, WorldID) VALUES (@0, @1, @2, @3, @4, NULL, @5)",
+				x, y - 1, (player.IsLoggedIn && player.Group.HasPermission("infchests.chest.protect")) ? player.UserAccountName : null, 0,
 				"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0," +
 				"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0", Main.worldID);
 			Main.chest[999] = null;
 		}
 
+		void Bank(CommandArgs e)
+		{
+			if (e.Parameters.Count != 1)
+			{
+				e.Player.SendErrorMessage("Invalid syntax! Proper syntax: /cbank <name>");
+				return;
+			}
+
+			Infos[e.Player.Index].Action = ChestAction.SetBank;
+			Infos[e.Player.Index].BankName = e.Parameters[0];
+			e.Player.SendInfoMessage("Open a chest to set it to bank chest '{0}'.", e.Parameters[0]);
+		}
 		void ConvertChests(CommandArgs e)
 		{
 			Task.Factory.StartNew(() => 
+			{
+				int converted = 0;
+				var items = new StringBuilder();
+				for (int i = 0; i < 1000; i++)
 				{
-					int converted = 0;
-					StringBuilder items = new StringBuilder();
-					for (int i = 0; i < 1000; i++)
+					Terraria.Chest c = Main.chest[i];
+					if (c != null)
 					{
-						Terraria.Chest c = Main.chest[i];
-						if (c != null)
-						{
-							for (int j = 0; j < 40; j++)
-								items.Append("," + c.item[j].netID + "," + c.item[j].stack + "," + c.item[j].prefix);
-							Database.Query("INSERT INTO Chests (X, Y, Account, Items, WorldID) VALUES (@0, @1, '', @2, @3)",
-								c.x, c.y, items.ToString().Substring(1), Main.worldID);
-							converted++;
-							items.Clear();
-							Main.chest[i] = null;
-						}
+						for (int j = 0; j < 40; j++)
+							items.Append(c.item[j].netID).Append(",").Append(c.item[j].stack).Append(",").Append(c.item[j].prefix).Append(",");
+						Database.Query("INSERT INTO Chests (X, Y, Account, Items, WorldID) VALUES (@0, @1, '', @2, @3)",
+							c.x, c.y, items.ToString(0, items.Length - 1), Main.worldID);
+						converted++;
+						items.Clear();
+						Main.chest[i] = null;
 					}
+				}
 
-					e.Player.SendSuccessMessage("[InfiniteChests] Converted {0} chest{1}.", converted, converted == 1 ? "" : "s");
-					if (converted > 0)
-						WorldFile.saveWorld();
-				});
+				e.Player.SendSuccessMessage("Converted {0} chest{1}.", converted, converted == 1 ? "" : "s");
+				if (converted > 0)
+					WorldFile.saveWorld();
+			});
 		}
 		void Deselect(CommandArgs e)
 		{
-			Infos[e.Player.Index].action = ChestAction.NONE;
+			var info = Infos[e.Player.Index];
+			info.Action = ChestAction.None;
+			info.BankName = null;
+			info.Password = null;
 			e.Player.SendInfoMessage("Stopped selecting a chest.");
 		}
 		void Info(CommandArgs e)
 		{
-			Infos[e.Player.Index].action = ChestAction.INFO;
+			Infos[e.Player.Index].Action = ChestAction.GetInfo;
 			e.Player.SendInfoMessage("Open a chest to get its info.");
 		}
 		void Lock(CommandArgs e)
@@ -589,8 +740,8 @@ namespace InfiniteChests
 				return;
 			}
 
-			Infos[e.Player.Index].action = ChestAction.SETPASS;
-			Infos[e.Player.Index].password = e.Parameters[0];
+			Infos[e.Player.Index].Action = ChestAction.SetPassword;
+			Infos[e.Player.Index].Password = e.Parameters[0];
 			if (e.Parameters[0].ToLower() == "remove")
 			{
 				e.Player.SendInfoMessage("Open chest to disable a password on it.");
@@ -602,7 +753,7 @@ namespace InfiniteChests
 		}
 		void Protect(CommandArgs e)
 		{
-			Infos[e.Player.Index].action = ChestAction.PROTECT;
+			Infos[e.Player.Index].Action = ChestAction.Protect;
 			e.Player.SendInfoMessage("Open a chest to protect it.");
 		}
 		void Prune(CommandArgs e)
@@ -636,17 +787,17 @@ namespace InfiniteChests
 		{
 			if (e.Parameters.Count > 1)
 			{
-				e.Player.SendErrorMessage("Invalid syntax! Proper syntax: : /crefill [interval]");
+				e.Player.SendErrorMessage("Invalid syntax! Proper syntax: /crefill [interval]");
 				return;
 			}
-			Infos[e.Player.Index].time = 0;
+			Infos[e.Player.Index].RefillTime = 0;
 			if (e.Parameters.Count == 1)
 			{
 				int time;
 				if (int.TryParse(e.Parameters[0], out time) && time > 0)
 				{
-					Infos[e.Player.Index].action = ChestAction.REFILL;
-					Infos[e.Player.Index].time = time;
+					Infos[e.Player.Index].Action = ChestAction.SetRefill;
+					Infos[e.Player.Index].RefillTime = time;
 					e.Player.SendInfoMessage("Open a chest to make it refill with an interval of {0} second{1}.", time, time == 1 ? "" : "s");
 					return;
 				}
@@ -654,19 +805,65 @@ namespace InfiniteChests
 			}
 			else
 			{
-				Infos[e.Player.Index].action = ChestAction.REFILL;
+				Infos[e.Player.Index].Action = ChestAction.SetRefill;
 				e.Player.SendInfoMessage("Open a chest to toggle its refill status.");
 			}
 		}
 		void PublicProtect(CommandArgs e)
 		{
-			Infos[e.Player.Index].action = ChestAction.PUBLIC;
+			Infos[e.Player.Index].Action = ChestAction.TogglePublic;
 			e.Player.SendInfoMessage("Open a chest to toggle its public status.");
 		}
 		void RegionProtect(CommandArgs e)
 		{
-			Infos[e.Player.Index].action = ChestAction.REGION;
+			Infos[e.Player.Index].Action = ChestAction.ToggleRegion;
 			e.Player.SendInfoMessage("Open a chest to toggle its region share status.");
+		}
+		void ReverseConvertChests(CommandArgs e)
+		{
+			Task.Factory.StartNew(() =>
+			{
+				using (var reader = Database.QueryReader("SELECT COUNT(*) AS Count FROM Chests"))
+				{
+					reader.Read();
+					if (reader.Get<int>("Count") > 1000)
+					{
+						e.Player.SendErrorMessage("The chests cannot be reverse-converted without losing data.");
+						return;
+					}
+				}
+
+				int i = 0;
+				using (var reader = Database.QueryReader("SELECT Items, Name, X, Y FROM Chests WHERE WorldID = @0", Main.worldID))
+				{
+					while (reader.Read())
+					{
+						var chest = (Main.chest[i++] = new Terraria.Chest());
+
+						string items = reader.Get<string>("Items");
+						chest.name = reader.Get<string>("Name");
+						chest.x = reader.Get<int>("X");
+						chest.y = reader.Get<int>("Y");
+
+						int[] itemArgs = new int[120];
+						string[] split = items.Split(',');
+						for (int j = 0; j < 40; j++)
+						{
+							int netID = Convert.ToInt32(split[3 * j]);
+							int prefix = Convert.ToInt32(split[3 * j + 2]);
+							int stack = Convert.ToInt32(split[3 * j + 1]);
+							chest.item[j] = new Item();
+							chest.item[j].netDefaults(netID);
+							chest.item[j].Prefix(prefix);
+							chest.item[j].stack = stack;
+						}
+					}
+				}
+				Database.Query("DELETE FROM Chests WHERE WorldID = @0", Main.worldID);
+				e.Player.SendSuccessMessage("Reverse converted {0} chests.", i);
+				if (i > 0)
+					WorldFile.saveWorld();
+			});
 		}
 		void Unlock(CommandArgs e)
 		{
@@ -675,12 +872,12 @@ namespace InfiniteChests
 				e.Player.SendErrorMessage("Invalid syntax! Proper syntax: /cunlock <password>");
 				return;
 			}
-			Infos[e.Player.Index].password = e.Parameters[0];
+			Infos[e.Player.Index].Password = e.Parameters[0];
 			e.Player.SendInfoMessage("Open chest to unlock it.");
 		}
 		void Unprotect(CommandArgs e)
 		{
-			Infos[e.Player.Index].action = ChestAction.UNPROTECT;
+			Infos[e.Player.Index].Action = ChestAction.Unprotect;
 			e.Player.SendInfoMessage("Open a chest to unprotect it.");
 		}
 	}
