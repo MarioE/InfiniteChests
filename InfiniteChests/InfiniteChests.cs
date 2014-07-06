@@ -300,7 +300,7 @@ namespace InfiniteChests
 		void GetChest(int x, int y, int plr)
 		{
 			Chest chest = null;
-			using (QueryResult reader = Database.QueryReader("SELECT Account, BankID, Flags, Items, Password FROM Chests WHERE X = @0 AND Y = @1 AND WorldID = @2",
+			using (QueryResult reader = Database.QueryReader("SELECT Account, BankID, Flags, Items, Password, RefillTime FROM Chests WHERE X = @0 AND Y = @1 AND WorldID = @2",
 				x, y, Main.worldID))
 			{
 				if (reader.Read())
@@ -597,7 +597,7 @@ namespace InfiniteChests
 			lock (Database)
 			{
 				Chest chest = null;
-				using (QueryResult reader = Database.QueryReader("SELECT Account, BankID, Flags, Items FROM Chests WHERE X = @0 AND Y = @1 AND WorldID = @2",
+				using (QueryResult reader = Database.QueryReader("SELECT Account, BankID, Flags, Items, RefillTime FROM Chests WHERE X = @0 AND Y = @1 AND WorldID = @2",
 					Infos[plr].X, Infos[plr].Y, Main.worldID))
 				{
 					if (reader.Read())
@@ -607,7 +607,8 @@ namespace InfiniteChests
 							Account = reader.Get<string>("Account"),
 							BankID = reader.Get<int>("BankID"),
 							Flags = (ChestFlags)reader.Get<int>("Flags"),
-							Items = reader.Get<string>("Items")
+							Items = reader.Get<string>("Items"),
+							RefillTime = reader.Get<int>("RefillTime")
 						};
 					}
 				}
