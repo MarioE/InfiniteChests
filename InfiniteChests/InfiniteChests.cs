@@ -253,7 +253,6 @@ namespace InfiniteChests
 			sqlcreator.EnsureExists(new SqlTable("Chests",
 				new SqlColumn("X", MySqlDbType.Int32),
 				new SqlColumn("Y", MySqlDbType.Int32),
-				new SqlColumn("Name", MySqlDbType.Text),
 				new SqlColumn("Account", MySqlDbType.Text),
 				new SqlColumn("Items", MySqlDbType.Text),
 				new SqlColumn("Flags", MySqlDbType.Int32),
@@ -870,14 +869,14 @@ namespace InfiniteChests
 				}
 
 				int i = 0;
-				using (var reader = Database.QueryReader("SELECT Items, Name, X, Y FROM Chests WHERE WorldID = @0", Main.worldID))
+				using (var reader = Database.QueryReader("SELECT Items, X, Y FROM Chests WHERE WorldID = @0", Main.worldID))
 				{
 					while (reader.Read())
 					{
 						var chest = (Main.chest[i++] = new Terraria.Chest());
 
 						string items = reader.Get<string>("Items");
-						chest.name = reader.Get<string>("Name");
+						chest.name = "";
 						chest.x = reader.Get<int>("X");
 						chest.y = reader.Get<int>("Y");
 
