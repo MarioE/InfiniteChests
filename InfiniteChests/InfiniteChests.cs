@@ -5,16 +5,17 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Timers;
 using Mono.Data.Sqlite;
 using MySql.Data.MySqlClient;
 using Terraria;
+using Terraria.ID;
 using TerrariaApi.Server;
 using TShockAPI;
 using TShockAPI.DB;
-using System.Text.RegularExpressions;
 
 namespace InfiniteChests
 {
@@ -315,6 +316,12 @@ namespace InfiniteChests
 					};
 				}
 			}
+			using (QueryResult reader = Database.QueryReader("SELECT Items FROM BankChests WHERE Account = @0 AND BankID = @1",
+				chest.Account, chest.BankID))
+			{
+				if (reader.Read())
+					chest.Items = reader.Get<string>("Items");
+			}
 
 			var info = Infos[plr];
 			TSPlayer player = TShock.Players[plr];
@@ -440,8 +447,8 @@ namespace InfiniteChests
 						}
 						if (info.RefillTime > 0)
 						{
-							Database.Query("UPDATE Chests SET Flags = @0, RefillTime = @1 WHERE X = @2 AND Y = @3 AND WorldID = @4",
-								chest.Flags | ChestFlags.Refill, info.RefillTime, x, y, Main.worldID);
+							Database.Query("UPDATE Chests SET Flags = Flags | 4, RefillTime = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
+								info.RefillTime, x, y, Main.worldID);
 							player.SendSuccessMessage("This chest will now refill with a delay of {0} second{1}.", info.RefillTime, info.RefillTime == 1 ? "" : "s");
 						}
 						else
@@ -466,6 +473,14 @@ namespace InfiniteChests
 						player.SendSuccessMessage("This chest is now un-protected.");
 						break;
 					default:
+#if !MULTI_USE
+						if (Infos.Any(p => p.X == x && p.Y == y))
+						{
+							player.SendErrorMessage("This chest is already in use.");
+							return;
+						}
+#endif
+
 						bool isFree = String.IsNullOrEmpty(chest.Account);
 						bool isOwner = chest.Account == player.UserAccountName || player.Group.HasPermission("infchests.admin.editall");
 						bool isRegion = chest.IsRegion && TShock.Regions.CanBuild(x, y, player);
@@ -485,21 +500,6 @@ namespace InfiniteChests
 							{
 								player.SendSuccessMessage("Chest unlocked.");
 								info.Password = "";
-							}
-						}
-
-						if (chest.IsBank)
-						{
-							using (QueryResult reader = Database.QueryReader("SELECT Items FROM BankChests WHERE Account = @0 AND BankID = @1",
-								chest.Account, chest.BankID))
-							{
-								if (reader.Read())
-									chest.Items = reader.Get<string>("Items");
-								else
-								{
-									player.SendErrorMessage("This bank chest was corrupted.");
-									break;
-								}
 							}
 						}
 
@@ -658,16 +658,18 @@ namespace InfiniteChests
 
 					if (chest.IsBank)
 					{
-						Database.Query("UPDATE BankChests SET Items = @0 WHERE Account = @1 AND BankID = @2",
-							newItems.ToString(0, newItems.Length - 1), chest.Account, chest.BankID);
+						Database.Query("UPDATE BankChests SET Items = @0 WHERE Account = @1 AND BankID = @2 AND WorldID = @3",
+							newItems.ToString(0, newItems.Length - 1), chest.Account, chest.BankID, Main.worldID);
 					}
 					else
 					{
 						Database.Query("UPDATE Chests SET Items = @0 WHERE X = @1 AND Y = @2 AND WorldID = @3",
 							newItems.ToString(0, newItems.Length - 1), info.X, info.Y, Main.worldID);
+#if MULTI_USE
 						byte[] raw = new byte[] { 11, 0, 32, 0, 0, slot, (byte)stack, (byte)(stack >> 8), prefix, (byte)ID, (byte)(ID >> 8) };
 						foreach (int i in Infos.Where(i => i.X == info.X && i.Y == info.Y && i != info).Select(i => i.Index))
 							TShock.Players[i].SendRawData(raw);
+#endif
 					}
 				}
 			}
@@ -675,8 +677,8 @@ namespace InfiniteChests
 		void PlaceChest(int x, int y, int plr)
 		{
 			TSPlayer player = TShock.Players[plr];
-			Database.Query("INSERT INTO Chests (X, Y, Account, Flags, Items, Password, WorldID) VALUES (@0, @1, @2, @3, @4, NULL, @5)",
-				x, y - 1, (player.IsLoggedIn && player.Group.HasPermission("infchests.chest.protect")) ? player.UserAccountName : null, 0,
+			Database.Query("INSERT INTO Chests (X, Y, Account, Flags, Items, Password, WorldID) VALUES (@0, @1, @2, 0, @3, NULL, @4)",
+				x, y - 1, (player.IsLoggedIn && player.Group.HasPermission("infchests.chest.protect")) ? player.UserAccountName : null,
 				"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0," +
 				"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0", Main.worldID);
 			Main.chest[999] = null;
@@ -686,7 +688,7 @@ namespace InfiniteChests
 		{
 			if (e.Parameters.Count != 1)
 			{
-				e.Player.SendErrorMessage("Invalid syntax! Proper syntax: /cbank <ID>");
+				e.Player.SendErrorMessage("Invalid syntax! Proper syntax: /cbank <ID or remove>");
 				return;
 			}
 
@@ -795,26 +797,73 @@ namespace InfiniteChests
 		{
 			Task.Factory.StartNew(() =>
 				{
-					using (var reader = Database.QueryReader("SELECT X, Y FROM Chests WHERE Items = @0 AND WorldID = @1",
-						"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0," +
-						"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",
-						Main.worldID))
+					int corrupted = 0;
+					int empty = 0;
+					var pruneX = new List<int>();
+					var pruneY = new List<int>();
+					for (int i = 0; i < Main.maxTilesX; i++)
+					{
+						for (int j = 0; j < Main.maxTilesY; j++)
+						{
+							if (Main.tile[i, j].type == TileID.Containers)
+							{
+								int x = i;
+								int y = j;
+								if (Main.tile[x, y].frameY % 36 != 0)
+									y--;
+								if (Main.tile[x, y].frameX % 36 != 0)
+									x--;
+
+								using (var reader = Database.QueryReader("SELECT Items FROM Chests WHERE X = @0 AND Y = @1 AND WorldID = @2", x, y, Main.worldID))
+								{
+									if (reader.Read())
+									{
+										if (reader.Get<string>("Items") ==
+											"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0," +
+											"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0")
+										{
+											empty++;
+											WorldGen.KillTile(x, y);
+											TSPlayer.All.SendTileSquare(x, y, 3);
+											pruneX.Add(x);
+											pruneY.Add(y);
+										}
+									}
+									else
+									{
+										corrupted++;
+										WorldGen.KillTile(x, y);
+										TSPlayer.All.SendTileSquare(x, y, 3);
+									}
+								}
+							}
+						}
+					}
+
+					e.Player.SendSuccessMessage("Pruned {0} empty chest{1}.", empty, empty == 1 ? "" : "s");
+
+					using (var reader = Database.QueryReader("SELECT X, Y FROM Chests WHERE WorldID = @0", Main.worldID))
 					{
 						while (reader.Read())
 						{
 							int x = reader.Get<int>("X");
 							int y = reader.Get<int>("Y");
-							WorldGen.KillTile(x, y);
-							TSPlayer.All.SendTileSquare(x, y, 3);
+							if (Main.tile[x, y].type != TileID.Containers)
+							{
+								corrupted++;
+								WorldGen.KillTile(x, y);
+								TSPlayer.All.SendTileSquare(x, y, 3);
+								pruneX.Add(x);
+								pruneY.Add(y);
+							}
 						}
 					}
 
-					int count = Database.Query("DELETE FROM Chests WHERE Items = @0 AND WorldID = @1",
-						"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0," +
-						"0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0",
-						Main.worldID);
-					e.Player.SendSuccessMessage("Pruned {0} chest{1}.", count, count == 1 ? "" : "s");
-					if (count > 0)
+					for (int i = 0; i < pruneX.Count; i++)
+						Database.Query("DELETE FROM Chests WHERE X = @0 AND Y = @1 AND WorldID = @2", pruneX[i], pruneY[i], Main.worldID);
+
+					e.Player.SendSuccessMessage("Pruned {0} corrupted chest{1}.", corrupted, corrupted == 1 ? "" : "s");
+					if (corrupted + empty > 0)
 						WorldFile.saveWorld();
 				});
 		}
