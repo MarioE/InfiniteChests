@@ -780,13 +780,9 @@ namespace InfiniteChests
 			Infos[e.Player.Index].Action = ChestAction.SetPassword;
 			Infos[e.Player.Index].Password = e.Parameters[0];
 			if (e.Parameters[0].ToLower() == "remove")
-			{
-				e.Player.SendInfoMessage("Open chest to disable a password on it.");
-			}
+				e.Player.SendInfoMessage("Open a chest to disable a password on it.");
 			else
-			{
-				e.Player.SendInfoMessage("Open chest to enable a password on it.");
-			}
+				e.Player.SendInfoMessage("Open a chest to set its password to '{0}'.", e.Parameters[0]);
 		}
 		void Protect(CommandArgs e)
 		{
@@ -954,7 +950,7 @@ namespace InfiniteChests
 				return;
 			}
 			Infos[e.Player.Index].Password = e.Parameters[0];
-			e.Player.SendInfoMessage("Open chest to unlock it.");
+			e.Player.SendInfoMessage("Open a chest to unlock it.");
 		}
 		void Unprotect(CommandArgs e)
 		{
