@@ -8,6 +8,7 @@ namespace InfiniteChests
 		public int BankID;
 		public ChestFlags Flags;
 		public string HashedPassword = "";
+		public int ID;
 		public string Items;
 		public Point Location;
 		public int RefillTime;

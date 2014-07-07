@@ -33,7 +33,7 @@
     <UseVSHostingProcess>true</UseVSHostingProcess>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release Multi-Use|AnyCPU'">
-    <OutputPath>bin\Release Multi-Use\</OutputPath>
+    <OutputPath>bin\</OutputPath>
     <DefineConstants>TRACE;MULTI_USE</DefineConstants>
     <Optimize>true</Optimize>
     <DebugType>pdbonly</DebugType>
