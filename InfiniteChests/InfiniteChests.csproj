@@ -44,22 +44,21 @@
   <ItemGroup>
     <Reference Include="Mono.Data.Sqlite">
       <HintPath>..\References\Mono.Data.Sqlite.dll</HintPath>
+      <Private>False</Private>
     </Reference>
     <Reference Include="MySql.Data">
       <HintPath>..\References\MySql.Data.dll</HintPath>
+      <Private>False</Private>
     </Reference>
     <Reference Include="System" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Xml.Linq" />
-    <Reference Include="System.Data.DataSetExtensions" />
-    <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.Data" />
-    <Reference Include="System.Xml" />
     <Reference Include="TerrariaServer">
       <HintPath>..\References\TerrariaServer.exe</HintPath>
+      <Private>False</Private>
     </Reference>
     <Reference Include="TShockAPI">
       <HintPath>..\References\TShockAPI.dll</HintPath>
+      <Private>False</Private>
     </Reference>
   </ItemGroup>
   <ItemGroup>
