@@ -104,7 +104,7 @@ namespace InfiniteChests
 							{
 								int x = reader.ReadInt16();
 								int y = reader.ReadInt16();
-								Task.Factory.StartNew(() => GetChest(x, y, plr));
+								Task.Factory.StartNew(() => GetChest(x, y, plr)).LogExceptions();
 								e.Handled = true;
 							}
 							break;
@@ -118,7 +118,7 @@ namespace InfiniteChests
 								int stack = reader.ReadInt16();
 								byte prefix = reader.ReadByte();
 								int netID = reader.ReadInt16();
-								Task.Factory.StartNew(() => ModChest(plr, slot, netID, stack, prefix));
+								Task.Factory.StartNew(() => ModChest(plr, slot, netID, stack, prefix)).LogExceptions();
 								e.Handled = true;
 							}
 							break;
@@ -144,7 +144,7 @@ namespace InfiniteChests
 								{
 									if (TShock.Regions.CanBuild(x, y, TShock.Players[plr]))
 									{
-										Task.Factory.StartNew(() => PlaceChest(x, y, plr));
+										Task.Factory.StartNew(() => PlaceChest(x, y, plr)).LogExceptions();
 										WorldGen.PlaceChest(x, y, 21, false, style);
 										NetMessage.SendData((int)PacketTypes.TileKill, -1, plr, "", 0, x, y, style, 1);
 										NetMessage.SendData((int)PacketTypes.TileKill, plr, -1, "", 0, x, y, style, 0);
@@ -157,7 +157,7 @@ namespace InfiniteChests
 										y--;
 									if (Main.tile[x, y].frameX % 36 != 0)
 										x--;
-									Task.Factory.StartNew(() => KillChest(x, y, plr));
+									Task.Factory.StartNew(() => KillChest(x, y, plr)).LogExceptions();
 									e.Handled = true;
 								}
 							}
@@ -614,6 +614,9 @@ namespace InfiniteChests
 				}
 
 				TSPlayer player = TShock.Players[plr];
+				if (player == null)
+					return;
+
 				if (chest == null)
 				{
 					player.SendErrorMessage("This chest is corrupted. Please remove it.");
@@ -754,7 +757,7 @@ namespace InfiniteChests
 				e.Player.SendSuccessMessage("Converted {0} chest{1}.", converted, converted == 1 ? "" : "s");
 				if (converted > 0)
 					WorldFile.saveWorld();
-			});
+			}).LogExceptions();
 		}
 		void Deselect(CommandArgs e)
 		{
@@ -858,7 +861,7 @@ namespace InfiniteChests
 					e.Player.SendSuccessMessage("Pruned {0} corrupted chest{1}.", corrupted, corrupted == 1 ? "" : "s");
 					if (corrupted + empty > 0)
 						WorldFile.saveWorld();
-				});
+				}).LogExceptions();
 		}
 		void Refill(CommandArgs e)
 		{
@@ -940,7 +943,7 @@ namespace InfiniteChests
 				e.Player.SendSuccessMessage("Reverse converted {0} chests.", i);
 				if (i > 0)
 					WorldFile.saveWorld();
-			});
+			}).LogExceptions();
 		}
 		void Unlock(CommandArgs e)
 		{
@@ -956,6 +959,15 @@ namespace InfiniteChests
 		{
 			Infos[e.Player.Index].Action = ChestAction.Unprotect;
 			e.Player.SendInfoMessage("Open a chest to unprotect it.");
+		}
+	}
+
+	public static class TaskExt
+	{
+		public static Task LogExceptions(this Task task)
+		{
+			task.ContinueWith(t => { Log.ConsoleError(t.Exception.ToString()); }, TaskContinuationOptions.OnlyOnFaulted);
+			return task;
 		}
 	}
 }
