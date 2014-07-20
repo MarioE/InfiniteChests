@@ -124,7 +124,11 @@ namespace InfiniteChests
 							break;
 						case PacketTypes.ChestOpen:
 							{
-								reader.ReadInt16();
+								if (reader.ReadInt16() == -1)
+								{
+									Infos[plr].X = -1;
+									Infos[plr].Y = -1;
+								}
 								int x = reader.ReadInt16();
 								int y = reader.ReadInt16();
 								int length = reader.ReadByte();
