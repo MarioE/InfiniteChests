@@ -970,7 +970,7 @@ namespace InfiniteChests
 	{
 		public static Task LogExceptions(this Task task)
 		{
-			task.ContinueWith(t => { Log.ConsoleError(t.Exception.ToString()); }, TaskContinuationOptions.OnlyOnFaulted);
+			task.ContinueWith(t => { }, TaskContinuationOptions.OnlyOnFaulted);
 			return task;
 		}
 	}
