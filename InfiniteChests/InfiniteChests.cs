@@ -102,6 +102,11 @@ namespace InfiniteChests
 					{
 						case PacketTypes.ChestGetContents:
 							{
+							    if (Infos[plr].TransactionsLeft > 0)
+							    {
+							        e.Handled = true;
+							        return;
+							    }
 								int x = reader.ReadInt16();
 								int y = reader.ReadInt16();
 								Task.Factory.StartNew(() => GetChest(x, y, plr)).LogExceptions();
@@ -118,27 +123,42 @@ namespace InfiniteChests
 								int stack = reader.ReadInt16();
 								byte prefix = reader.ReadByte();
 								int netID = reader.ReadInt16();
+							    Infos[plr].TransactionsLeft++;
 								Task.Factory.StartNew(() => ModChest(plr, slot, netID, stack, prefix)).LogExceptions();
 								e.Handled = true;
 							}
 							break;
 						case PacketTypes.ChestOpen:
-							{
-								if (reader.ReadInt16() == -1)
-								{
-									Infos[plr].X = -1;
-									Infos[plr].Y = -1;
-								}
-								int x = reader.ReadInt16();
-								int y = reader.ReadInt16();
-								int length = reader.ReadByte();
+					        {
+							    if (reader.ReadInt16() == -1)
+							    {
+							        if (Infos[plr].TransactionsLeft > 0)
+							            Infos[plr].ShouldCloseAfterTransactions = true;
+							        else
+							        {
+							            Infos[plr].X = -1;
+							            Infos[plr].Y = -1;
+							        }
+							    }
+                                else if (Infos[plr].TransactionsLeft > 0)
+                                {
+                                    return;
+                                }
+							    int x = reader.ReadInt16();
+							    int y = reader.ReadInt16();
+							    int length = reader.ReadByte();
 
-								if (length != 0 && length <= 20 && length != 255)
-									TShock.Players[plr].SendData(PacketTypes.ChestName, "", 0, x, y);
-							}
-							break;
+							    if (length != 0 && length <= 20 && length != 255)
+								    TShock.Players[plr].SendData(PacketTypes.ChestName, "", 0, x, y);
+						    }
+						    break;
 						case PacketTypes.TileKill:
 							{
+                                if (Infos[plr].TransactionsLeft > 0)
+                                {
+                                    return;
+                                }
+
 								byte action = reader.ReadByte();
 								int x = reader.ReadInt16();
 								int y = reader.ReadInt16();
@@ -618,11 +638,14 @@ namespace InfiniteChests
 				}
 
 				TSPlayer player = TShock.Players[plr];
-				if (player == null)
-					return;
-
-				if (chest == null)
+			    if (player == null)
+			    {
+                    DecrementTransactions(plr);
+			        return;
+			    }
+			    if (chest == null)
 				{
+                    DecrementTransactions(plr);
 					player.SendErrorMessage("This chest is corrupted. Please remove it.");
 					return;
 				}
@@ -636,6 +659,7 @@ namespace InfiniteChests
 							chest.Items = reader.Get<string>("Items");
 						else
 						{
+                            DecrementTransactions(plr);
 							player.SendErrorMessage("This bank chest was corrupted.");
 							return;
 						}
@@ -679,8 +703,20 @@ namespace InfiniteChests
 #endif
 					}
 				}
+			    DecrementTransactions(plr);
 			}
 		}
+
+	    void DecrementTransactions(int plr)
+	    {
+	        Infos[plr].TransactionsLeft--;
+	        if (Infos[plr].TransactionsLeft == 0 && Infos[plr].ShouldCloseAfterTransactions)
+	        {
+                Infos[plr].ShouldCloseAfterTransactions = false;
+                Infos[plr].X = -1;
+                Infos[plr].Y = -1;
+	        }
+	    }
 		void PlaceChest(int x, int y, int plr)
 		{
 			TSPlayer player = TShock.Players[plr];
