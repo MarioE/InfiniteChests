@@ -14,5 +14,7 @@ namespace InfiniteChests
 		public int RefillTime;
 		public int X;
 		public int Y;
+		public int TransactionsLeft = 0;
+		public bool ShouldCloseAfterTransactions = false;
 	}
 }
