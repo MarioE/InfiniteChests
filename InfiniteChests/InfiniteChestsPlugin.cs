@@ -72,57 +72,7 @@ namespace InfiniteChests
             var player = args.Player;
             var session = player.GetSession();
             var subcommand = parameters.Count > 0 ? parameters[0] : "";
-            if (subcommand.Equals("allow", StringComparison.OrdinalIgnoreCase))
-            {
-                if (!player.HasPermission("infchests.chest.allow"))
-                {
-                    player.SendErrorMessage("You do not have access to this command.");
-                    return;
-                }
-
-                if (parameters.Count != 2)
-                {
-                    player.SendErrorMessage($"Syntax: {Commands.Specifier}chest allow <user-name>");
-                    return;
-                }
-
-                session.PendingChestAction = ChestAction.AllowUser;
-                var inputUsername = parameters[1];
-                if (TShock.Users.GetUserByName(inputUsername) == null)
-                {
-                    player.SendErrorMessage($"Invalid user '{inputUsername}'.");
-                    return;
-                }
-
-                session.PendingUsername = inputUsername;
-                player.SendInfoMessage($"Open a chest to allow {inputUsername}.");
-            }
-            else if (subcommand.Equals("allowg", StringComparison.OrdinalIgnoreCase))
-            {
-                if (!player.HasPermission("infchests.chest.allowg"))
-                {
-                    player.SendErrorMessage("You do not have access to this command.");
-                    return;
-                }
-
-                if (parameters.Count != 2)
-                {
-                    player.SendErrorMessage($"Syntax: {Commands.Specifier}chest allowg <group-name>");
-                    return;
-                }
-
-                session.PendingChestAction = ChestAction.AllowGroup;
-                var inputGroupName = parameters[1];
-                if (TShock.Groups.GetGroupByName(inputGroupName) == null)
-                {
-                    player.SendErrorMessage($"Invalid group '{inputGroupName}'.");
-                    return;
-                }
-
-                session.PendingGroupName = inputGroupName;
-                player.SendInfoMessage($"Open a chest to allow the {inputGroupName} group.");
-            }
-            else if (subcommand.Equals("claim", StringComparison.OrdinalIgnoreCase))
+            if (subcommand.Equals("claim", StringComparison.OrdinalIgnoreCase))
             {
                 if (!player.HasPermission("infchests.chest.claim"))
                 {
@@ -133,9 +83,9 @@ namespace InfiniteChests
                 session.PendingChestAction = ChestAction.Claim;
                 player.SendInfoMessage("Open a chest to claim it.");
             }
-            else if (subcommand.Equals("disallow", StringComparison.OrdinalIgnoreCase))
+            else if (subcommand.Equals("group", StringComparison.OrdinalIgnoreCase))
             {
-                if (!player.HasPermission("infchests.chest.disallow"))
+                if (!player.HasPermission("infchests.chest.group"))
                 {
                     player.SendErrorMessage("You do not have access to this command.");
                     return;
@@ -143,36 +93,11 @@ namespace InfiniteChests
 
                 if (parameters.Count != 2)
                 {
-                    player.SendErrorMessage($"Syntax: {Commands.Specifier}chest disallow <user-name>");
+                    player.SendErrorMessage($"Syntax: {Commands.Specifier}chest group <group-name>");
                     return;
                 }
 
-                session.PendingChestAction = ChestAction.DisallowUser;
-                var inputUsername = parameters[1];
-                if (TShock.Users.GetUserByName(inputUsername) == null)
-                {
-                    player.SendErrorMessage($"Invalid user '{inputUsername}'.");
-                    return;
-                }
-
-                session.PendingUsername = inputUsername;
-                player.SendInfoMessage($"Open a chest to disallow {inputUsername}.");
-            }
-            else if (subcommand.Equals("disallowg", StringComparison.OrdinalIgnoreCase))
-            {
-                if (!player.HasPermission("infchests.chest.disallowg"))
-                {
-                    player.SendErrorMessage("You do not have access to this command.");
-                    return;
-                }
-
-                if (parameters.Count != 2)
-                {
-                    player.SendErrorMessage($"Syntax: {Commands.Specifier}chest disallowg <group-name>");
-                    return;
-                }
-
-                session.PendingChestAction = ChestAction.DisallowGroup;
+                session.PendingChestAction = ChestAction.ToggleGroup;
                 var inputGroupName = parameters[1];
                 if (TShock.Groups.GetGroupByName(inputGroupName) == null)
                 {
@@ -181,7 +106,7 @@ namespace InfiniteChests
                 }
 
                 session.PendingGroupName = inputGroupName;
-                player.SendInfoMessage($"Open a chest to disallow the {inputGroupName} group.");
+                player.SendInfoMessage($"Open a chest to toggle access for the {inputGroupName} group.");
             }
             else if (subcommand.Equals("info", StringComparison.OrdinalIgnoreCase))
             {
@@ -260,27 +185,40 @@ namespace InfiniteChests
                 session.PendingChestAction = ChestAction.Unclaim;
                 player.SendInfoMessage("Open a chest to unclaim it.");
             }
+            else if (subcommand.Equals("user", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!player.HasPermission("infchests.chest.user"))
+                {
+                    player.SendErrorMessage("You do not have access to this command.");
+                    return;
+                }
+
+                if (parameters.Count != 2)
+                {
+                    player.SendErrorMessage($"Syntax: {Commands.Specifier}chest user <username>");
+                    return;
+                }
+
+                session.PendingChestAction = ChestAction.ToggleUser;
+                var inputUsername = parameters[1];
+                if (TShock.Users.GetUserByName(inputUsername) == null)
+                {
+                    player.SendErrorMessage($"Invalid user '{inputUsername}'.");
+                    return;
+                }
+
+                session.PendingUsername = inputUsername;
+                player.SendInfoMessage($"Open a chest to toggle access for {inputUsername}.");
+            }
             else
             {
-                if (player.HasPermission("infchests.chest.allow"))
-                {
-                    player.SendErrorMessage($"Syntax: {Commands.Specifier}chest allow <user-name>");
-                }
-                if (player.HasPermission("infchests.chest.allowg"))
-                {
-                    player.SendErrorMessage($"Syntax: {Commands.Specifier}chest allowg <group-name>");
-                }
                 if (player.HasPermission("infchests.chest.claim"))
                 {
                     player.SendErrorMessage($"Syntax: {Commands.Specifier}chest claim");
                 }
-                if (player.HasPermission("infchests.chest.disallow"))
+                if (player.HasPermission("infchests.chest.group"))
                 {
-                    player.SendErrorMessage($"Syntax: {Commands.Specifier}chest disallow <user-name>");
-                }
-                if (player.HasPermission("infchests.chest.disallowg"))
-                {
-                    player.SendErrorMessage($"Syntax: {Commands.Specifier}chest disallowg <group-name>");
+                    player.SendErrorMessage($"Syntax: {Commands.Specifier}chest group <group-name>");
                 }
                 if (player.HasPermission("infchests.chest.info"))
                 {
@@ -301,6 +239,10 @@ namespace InfiniteChests
                 if (player.HasPermission("infchests.chest.unclaim"))
                 {
                     player.SendErrorMessage($"Syntax: {Commands.Specifier}chest unclaim");
+                }
+                if (player.HasPermission("infchests.chest.user"))
+                {
+                    player.SendErrorMessage($"Syntax: {Commands.Specifier}chest user <username>");
                 }
             }
         }
@@ -389,8 +331,7 @@ namespace InfiniteChests
                         var itemId = int.Parse(components[0]);
                         var stackSize = int.Parse(components[0]);
                         var prefixId = byte.Parse(components[0]);
-                        chest.Items[index] = new NetItem(itemId, stackSize, prefixId);
-                        ++index;
+                        chest.Items[index++] = new NetItem(itemId, stackSize, prefixId);
                     }
                     foreach (var userId2 in users.Split(',').Select(int.Parse))
                     {
@@ -527,57 +468,47 @@ namespace InfiniteChests
                                                ? "This chest will no longer refill."
                                                : $"This chest will now refill every {chest.RefillTime}.");
                     break;
-                case ChestAction.AllowUser:
+                case ChestAction.ToggleUser:
                     if (!chest.IsOwner(player))
                     {
-                        Debug.WriteLine($"DEBUG: {player.Name} attempted to allow a user for chest at {x}, {y}");
+                        Debug.WriteLine($"DEBUG: {player.Name} attempted to toggle a user for chest at {x}, {y}");
                         player.SendErrorMessage("This chest is protected.");
                         break;
                     }
 
-                    Debug.WriteLine($"DEBUG: {player.Name} allowed a user for chest at {x}, {y}");
-                    chest.AllowedUsernames.Add(session.PendingUsername);
+                    Debug.WriteLine($"DEBUG: {player.Name} toggled a user for chest at {x}, {y}");
+                    if (chest.AllowedUsernames.Contains(session.PendingUsername))
+                    {
+                        chest.AllowedUsernames.Remove(session.PendingUsername);
+                        player.SendInfoMessage($"Disallowed {session.PendingUsername} from editing this chest.");
+                    }
+                    else
+                    {
+                        chest.AllowedUsernames.Add(session.PendingUsername);
+                        player.SendInfoMessage($"Allowed {session.PendingUsername} to edit this chest.");
+                    }
                     _database.Update(chest);
-                    player.SendInfoMessage($"Allowed {session.PendingUsername} to edit this chest.");
                     break;
-                case ChestAction.DisallowUser:
+                case ChestAction.ToggleGroup:
                     if (!chest.IsOwner(player))
                     {
-                        Debug.WriteLine($"DEBUG: {player.Name} attempted to disallow a user for chest at {x}, {y}");
+                        Debug.WriteLine($"DEBUG: {player.Name} attempted to toggle a group for chest at {x}, {y}");
                         player.SendErrorMessage("This chest is protected.");
                         break;
                     }
 
-                    Debug.WriteLine($"DEBUG: {player.Name} disallowed a user for chest at {x}, {y}");
-                    chest.AllowedUsernames.Remove(session.PendingUsername);
-                    _database.Update(chest);
-                    player.SendInfoMessage($"Disallowed {session.PendingUsername} from editing this chest.");
-                    break;
-                case ChestAction.AllowGroup:
-                    if (!chest.IsOwner(player))
+                    Debug.WriteLine($"DEBUG: {player.Name} toggled a group for chest at {x}, {y}");
+                    if (chest.AllowedGroupNames.Contains(session.PendingGroupName))
                     {
-                        Debug.WriteLine($"DEBUG: {player.Name} attempted to allow a group for chest at {x}, {y}");
-                        player.SendErrorMessage("This chest is protected.");
-                        break;
+                        chest.AllowedGroupNames.Remove(session.PendingGroupName);
+                        player.SendInfoMessage($"Disallowed the {session.PendingGroupName} group from editing this chest.");
                     }
-
-                    Debug.WriteLine($"DEBUG: {player.Name} allowed a group for chest at {x}, {y}");
-                    chest.AllowedGroupNames.Add(session.PendingGroupName);
-                    _database.Update(chest);
-                    player.SendInfoMessage($"Allowed the {session.PendingGroupName} group to edit this chest.");
-                    break;
-                case ChestAction.DisallowGroup:
-                    if (!chest.IsOwner(player))
+                    else
                     {
-                        Debug.WriteLine($"DEBUG: {player.Name} attempted to disallow a group for chest at {x}, {y}");
-                        player.SendErrorMessage("This chest is protected.");
-                        break;
+                        chest.AllowedGroupNames.Add(session.PendingGroupName);
+                        player.SendInfoMessage($"Allowed the {session.PendingGroupName} group to edit this chest.");
                     }
-
-                    Debug.WriteLine($"DEBUG: {player.Name} disallowed a group for chest at {x}, {y}");
-                    chest.AllowedGroupNames.Remove(session.PendingGroupName);
                     _database.Update(chest);
-                    player.SendInfoMessage($"Disallowed the {session.PendingGroupName} group from editing this chest.");
                     break;
                 case ChestAction.Claim:
                     if (!string.IsNullOrEmpty(chest.OwnerName))

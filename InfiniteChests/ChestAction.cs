@@ -31,33 +31,23 @@
         SetRefill = 4,
 
         /// <summary>
-        ///     Specifies that the player is allowing a user.
+        ///     Specifies that the player is toggling user access.
         /// </summary>
-        AllowUser = 5,
-
+        ToggleUser = 5,
+        
         /// <summary>
-        ///     Specifies that the player is disallowing a user.
+        ///     Specifies that the player is toggling group access.
         /// </summary>
-        DisallowUser = 6,
-
-        /// <summary>
-        ///     Specifies that the player is allowing a group.
-        /// </summary>
-        AllowGroup = 7,
-
-        /// <summary>
-        ///     Specifies that the player is disallowing a group.
-        /// </summary>
-        DisallowGroup = 8,
-
+        ToggleGroup = 6,
+        
         /// <summary>
         ///     Specifies that the player is claiming the chest.
         /// </summary>
-        Claim = 9,
+        Claim = 7,
 
         /// <summary>
         ///     Specifies that the player is unclaiming the chest.
         /// </summary>
-        Unclaim = 10
+        Unclaim = 8
     }
 }
