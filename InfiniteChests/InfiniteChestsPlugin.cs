@@ -19,14 +19,14 @@ using Chest = Terraria.Chest;
 namespace InfiniteChests
 {
     [ApiVersion(2, 1)]
-    public sealed class HousingPlugin : TerrariaPlugin
+    public sealed class InfiniteChestsPlugin : TerrariaPlugin
     {
         private static readonly string SqlitePath = Path.Combine("infchests", "db.sqlite");
 
         private DbConnection _connection;
         private ChestManager _database;
 
-        public HousingPlugin(Main game) : base(game)
+        public InfiniteChestsPlugin(Main game) : base(game)
         {
         }
 
