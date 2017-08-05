@@ -14,7 +14,6 @@ using Terraria.ID;
 using TerrariaApi.Server;
 using TShockAPI;
 using TShockAPI.DB;
-using Chest = Terraria.Chest;
 
 namespace InfiniteChests
 {
@@ -50,7 +49,8 @@ namespace InfiniteChests
             ServerApi.Hooks.WorldSave.Register(this, OnWorldSave);
 
             Commands.ChatCommands.Add(new Command("infchests.chest", ChestCmd, "chest"));
-            Commands.ChatCommands.Add(new Command("infchests.importchests", ImportChests, "importchests"));
+            Commands.ChatCommands.Add(new Command("infchests.exportchests", ExportChests, "exportchests"));
+            Commands.ChatCommands.Add(new Command("infchests.migratechests", MigrateChests, "migratechests"));
         }
 
         protected override void Dispose(bool disposing)
@@ -305,7 +305,35 @@ namespace InfiniteChests
             }
         }
 
-        private void ImportChests(CommandArgs args)
+        private void ExportChests(CommandArgs args)
+        {
+            var player = args.Player;
+            player.SendWarningMessage("Exporting chests. This may take a while...");
+
+            foreach (var chest in _database.GetAll())
+            {
+                var chestId = Main.chest.TakeWhile(c => c != null).Count();
+                if (chestId >= Main.maxChests)
+                {
+                    player.SendWarningMessage("The chest limit was reached.");
+                    break;
+                }
+
+                var terrariaChest = new Terraria.Chest {x = chest.X, y = chest.Y, name = chest.Name};
+                for (var i = 0; i < Terraria.Chest.maxItems; ++i)
+                {
+                    var item = new Item();
+                    item.SetDefaults(chest.Items[i].NetId);
+                    item.stack = chest.Items[i].Stack;
+                    item.prefix = chest.Items[i].PrefixId;
+                    terrariaChest.item[i] = item;
+                }
+                Main.chest[chestId] = terrariaChest;
+            }
+            player.SendSuccessMessage("Exported chests.");
+        }
+
+        private void MigrateChests(CommandArgs args)
         {
             IDbConnection connection;
             switch (TShock.Config.StorageType.ToLower())
@@ -331,7 +359,7 @@ namespace InfiniteChests
             }
 
             var player = args.Player;
-            player.SendWarningMessage("Importing chests. This may take a while...");
+            player.SendWarningMessage("Migrating chests. This may take a while...");
             using (var reader = connection.QueryReader("SELECT * FROM InfChests3 WHERE WorldID = @0", Main.worldID))
             {
                 while (reader.Read())
@@ -379,6 +407,7 @@ namespace InfiniteChests
                     _database.Update(chest);
                 }
             }
+            player.SendSuccessMessage("Migrated chests.");
         }
 
         private void OnGamePostInitialize(EventArgs args)
@@ -636,7 +665,7 @@ namespace InfiniteChests
                 Main.chest[chestId] = null;
                 _database.Add(action == 2 ? x - 1 : x, y - 1, "", player.User?.Name);
                 // We don't send a chest creation packet, as the players have to "discover" the chest themselves.
-                player.SendTileSquare(x, y, 3);
+                TSPlayer.All.SendTileSquare(x, y, 4);
             }
             // Chest and dresser removal
             else if (action == 1 || action == 3)
@@ -658,11 +687,13 @@ namespace InfiniteChests
                 {
                     Debug.WriteLine($"DEBUG: {player.Name} attempted to remove chest at {chest.X}, {chest.Y}");
                     player.SendErrorMessage("This chest is protected.");
+                    player.SendTileSquare(x, y, 4);
                 }
                 else if (!chest.IsEmpty)
                 {
                     Debug.WriteLine($"DEBUG: {player.Name} attempted to remove chest at {chest.X}, {chest.Y}");
                     player.SendErrorMessage("This chest isn't empty.");
+                    player.SendTileSquare(x, y, 4);
                 }
                 else
                 {
@@ -679,8 +710,8 @@ namespace InfiniteChests
                     }
                     WorldGen.KillTile(x, y);
                     _database.Remove(chest);
+                    TSPlayer.All.SendTileSquare(x, y, 4);
                 }
-                player.SendTileSquare(x, y, 3);
             }
             return true;
         }
@@ -745,6 +776,53 @@ namespace InfiniteChests
             {
                 Debug.WriteLine($"DEBUG: {player.Name} finished accessing chest (ID: {oldChestId})");
                 NetMessage.SendData((int)PacketTypes.SyncPlayerChestIndex, -1, player.Index, null, player.Index, -1);
+
+                // Handle biome mimic spawning.
+                if (oldChest == null)
+                {
+                    return;
+                }
+                var x = oldChest.X;
+                var y = oldChest.Y;
+                if (!TileID.Sets.BasicChest[Main.tile[x, y].type])
+                {
+                    return;
+                }
+
+                var npcId = -1;
+                var onlyItemId = oldChest.OnlyItemId;
+                if (onlyItemId == ItemID.LightKey)
+                {
+                    npcId = NPCID.BigMimicHallow;
+                }
+                else if (onlyItemId == ItemID.NightKey)
+                {
+                    npcId = WorldGen.crimson ? NPCID.BigMimicCrimson : NPCID.BigMimicCorruption;
+                }
+
+                if (npcId > 0)
+                {
+                    if (!player.HasPermission(Permissions.spawnmob))
+                    {
+                        Debug.WriteLine($"DEBUG: {player.Name} tried to spawn a biome mimic");
+                        player.SendErrorMessage("You don't have access to spawn mobs.");
+                        return;
+                    }
+
+                    Debug.WriteLine($"DEBUG: {player.Name} spawned a biome mimic");
+                    _database.Remove(oldChest);
+                    Main.tile[x, y].active(false);
+                    Main.tile[x, y + 1].active(false);
+                    Main.tile[x + 1, y].active(false);
+                    Main.tile[x + 1, y + 1].active(false);
+                    TSPlayer.All.SendTileSquare(x, y, 2);
+
+                    var npcIndex = NPC.NewNPC(16 * x + 16, 16 * y + 32, npcId);
+                    var npc = Main.npc[npcIndex];
+                    npc.whoAmI = npcIndex;
+                    TSPlayer.All.SendData(PacketTypes.NpcUpdate, "", npcIndex);
+                    npc.BigMimicSpawnSmoke();
+                }
             }
         }
 
@@ -762,7 +840,7 @@ namespace InfiniteChests
 
                 // First, check to see if we can stack anything.
                 var foundStack = false;
-                for (var i = 0; i < Chest.maxItems; ++i)
+                for (var i = 0; i < Terraria.Chest.maxItems; ++i)
                 {
                     var chestItem = chest.Items[i];
                     if (chestItem.NetId == item.type)
@@ -781,7 +859,7 @@ namespace InfiniteChests
                 // Then, place the item at the end if needed.
                 if (foundStack && item.stack > 0)
                 {
-                    for (var i = 0; i < Chest.maxItems; ++i)
+                    for (var i = 0; i < Terraria.Chest.maxItems; ++i)
                     {
                         var chestItem = chest.Items[i];
                         if (chestItem.NetId == 0 || chestItem.Stack == 0)

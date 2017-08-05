@@ -232,21 +232,13 @@ namespace InfiniteChests.Database
 
                 Debug.WriteLine($"DEBUG: Converting chest at {x}, {y}");
                 // Make sure to null out the Terraria chest, so that it doesn't interfere with us.
-                for (var i = 0; i < Main.maxChests; ++i)
-                {
-                    if (Main.chest[i] == terrariaChest)
-                    {
-                        Main.chest[i] = null;
-                    }
-                }
+                Main.chest[Array.IndexOf(Main.chest, terrariaChest)] = null;
 
                 var chest = Add(x, y, "", null);
                 chest.IsPublic = true;
                 for (var i = 0; i < Terraria.Chest.maxItems; ++i)
                 {
-                    var item = (NetItem)terrariaChest.item[i];
-                    chest.OriginalItems[i] = item;
-                    chest.Items[i] = item;
+                    chest.Items[i] = chest.OriginalItems[i] = (NetItem)terrariaChest.item[i];
                 }
                 Update(chest);
                 return chest;
@@ -288,8 +280,8 @@ namespace InfiniteChests.Database
                                 var itemId = reader2.Get<int>("ItemId");
                                 var stackSize = reader2.Get<int>("StackSize");
                                 var prefixId = reader2.Get<byte>("PrefixId");
-                                chest.Items[index] = new NetItem(itemId, stackSize, prefixId);
-                                chest.OriginalItems[index] = new NetItem(itemId, stackSize, prefixId);
+                                chest.Items[index] = chest.OriginalItems[index] =
+                                    new NetItem(itemId, stackSize, prefixId);
                             }
                         }
                         using (var reader2 = _connection.QueryReader(

@@ -48,9 +48,9 @@ namespace InfiniteChests
         /// <returns>The next chest ID.</returns>
         public int GetNextChestId()
         {
-            ++_nextChestId;
+            var result = _nextChestId++;
             _nextChestId %= Main.maxChests;
-            return _nextChestId;
+            return result;
         }
     }
 }

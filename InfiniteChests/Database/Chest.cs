@@ -79,6 +79,18 @@ namespace InfiniteChests.Database
         public string Name { get; set; }
 
         /// <summary>
+        ///     Gets the only item ID contained in the chest, or -1 if this is not the case.
+        /// </summary>
+        public int OnlyItemId
+        {
+            get
+            {
+                var items = Items.Where(i => i.NetId > 0 && i.Stack > 0).ToList();
+                return items.Count == 1 && items[0].Stack == 1 ? items[0].NetId : -1;
+            }
+        }
+
+        /// <summary>
         ///     Gets the original items.
         /// </summary>
         public NetItem[] OriginalItems { get; } = new NetItem[Terraria.Chest.maxItems];
