@@ -550,6 +550,12 @@ namespace InfiniteChests
                         break;
                     }
 
+                    var oldChestId = player.TPlayer.chest;
+                    if (session.IdToChest.TryGetValue(oldChestId, out var oldChest))
+                    {
+                        oldChest.IsInUse = false;
+                    }
+
                     chest.IsInUse = true;
                     chest.ShowTo(player, session.GetNextChestId());
                     break;
@@ -666,6 +672,7 @@ namespace InfiniteChests
             var tplayer = player.TPlayer;
             var session = player.GetSession();
             var oldChestId = tplayer.chest;
+            Console.WriteLine(oldChestId);
             if (session.IdToChest.TryGetValue(oldChestId, out var oldChest))
             {
                 oldChest.IsInUse = false;
